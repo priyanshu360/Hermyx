@@ -1,0 +1,63 @@
+server:
+  port: 8080
+
+log:
+  toFile: false
+  toStdout: true
+  prefix: "[hermyx] "
+  flags: 0
+
+cache:
+  enabled: true
+  capacity: 1000
+  ttl: 10s
+  keyConfig:
+    type:
+      - path
+      - method
+    excludeMethods:
+      - OPTIONS
+
+routes:
+  - path: "^/hello$"
+    target: "http://localhost:8081"
+    cache:
+      enabled: true
+      ttl: 30s
+      keyConfig:
+        type:
+          - path
+          - method
+        excludeMethods:
+          - OPTIONS
+
+  - path: "^/exceed$"
+    target: "http://localhost:8081"
+    cache:
+      enabled: true
+      ttl: 30s
+      keyConfig:
+        type:
+          - path
+          - method
+        excludeMethods:
+          - OPTIONS
+  - path: "^/time$"
+    target: "http://localhost:8081"
+    cache:
+      enabled: true
+      ttl: 10s
+  - path: "^/delay$"
+    target: "http://localhost:8081"
+    cache:
+      enabled: true 
+  - path: "^/echo$"
+    target: "http://localhost:8081"
+    cache:
+      enabled: true
+      ttl: 60s
+      keyConfig:
+        type:
+          - path
+          - query
+

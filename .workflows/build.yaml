@@ -1,0 +1,62 @@
+name: Go CI - Multi OS
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        go-version: ['1.20']
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ matrix.go-version }}
+
+      - name: Cache Go modules
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Verify gofmt formatting
+        run: |
+          if ! gofmt -l . | grep -q .; then
+            echo "Code is properly formatted"
+          else
+            echo "Run 'gofmt -w .' to fix formatting"
+            exit 1
+          fi
+
+      - name: Run tests
+        run: go test -v ./...
+
+      - name: Build Hermyx binary
+        run: |
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            go build -o hermyx.exe ./cmd/hermyx
+          else
+            go build -o hermyx ./cmd/hermyx
+          fi
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: hermyx-binary-${{ matrix.os }}
+          path: ${{ runner.os == 'Windows' && 'hermyx.exe' || 'hermyx' }}
