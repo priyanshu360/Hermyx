@@ -23,7 +23,7 @@ Run 'hermyx help <command>' for details on a specific command.`)
 
 func printRunHelp() {
 	fmt.Println(`Usage:
-  hermyx run [--config <path>]
+  hermyx up [--config <path>]
 
 Options:
   --config    Path to hermyx config YAML (default: ./hermyx.config.yaml)`)
@@ -38,8 +38,8 @@ func main() {
 	command := os.Args[1]
 
 	switch command {
-	case "run":
-		runCmd := flag.NewFlagSet("run", flag.ExitOnError)
+	case "up":
+		runCmd := flag.NewFlagSet("up", flag.ExitOnError)
 		configPath := runCmd.String("config", "hermyx.config.yaml", "Path to configuration YAML file")
 
 		if err := runCmd.Parse(os.Args[2:]); err != nil {
@@ -66,7 +66,7 @@ func main() {
 			printRootHelp()
 		} else {
 			switch os.Args[2] {
-			case "run":
+			case "up":
 				printRunHelp()
 			default:
 				fmt.Printf("Unknown help topic: %s\n", os.Args[2])

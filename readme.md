@@ -9,31 +9,32 @@ Hermyx is a lightweight, high-performance HTTP reverse proxy and caching engine 
 
 ## Table of Contents
 
-- [Features](#features)
-- [Getting Started](#getting-started)
-  - [Prerequisites](#prerequisites)
-  - [Installation](#installation)
-  - [Configuration](#configuration)
-  - [Running Hermyx](#running-hermyx)
-- [How It Works](#how-it-works)
-- [Project Structure](#project-structure)
-- [Extending Hermyx](#extending-hermyx)
-- [Contributing](#contributing)
-- [License](#license)
-- [Contact](#contact)
+* [Features](#features)
+* [Getting Started](#getting-started)
+
+  * [Prerequisites](#prerequisites)
+  * [Installation](#installation)
+  * [Configuration](#configuration)
+  * [Running Hermyx](#running-hermyx)
+* [How It Works](#how-it-works)
+* [Project Structure](#project-structure)
+* [Extending Hermyx](#extending-hermyx)
+* [Contributing](#contributing)
+* [License](#license)
+* [Contact](#contact)
 
 ---
 
 ## Features
 
-- Configurable routes with regex-based path matching
-- Include/exclude filters to refine route matching
-- HTTP method filtering to exclude methods from caching
-- In-memory response caching with TTL and max content size controls
-- Customizable cache key generation
-- Fallback proxy for unmatched requests
-- Efficient HTTP handling using [fasthttp](https://github.com/valyala/fasthttp)
-- Extensible logging with configurable output
+* Configurable routes with regex-based path matching
+* Include/exclude filters to refine route matching
+* HTTP method filtering to exclude methods from caching
+* In-memory response caching with TTL and max content size controls
+* Customizable cache key generation
+* Fallback proxy for unmatched requests
+* Efficient HTTP handling using [fasthttp](https://github.com/valyala/fasthttp)
+* Extensible logging with configurable output
 
 ---
 
@@ -41,8 +42,8 @@ Hermyx is a lightweight, high-performance HTTP reverse proxy and caching engine 
 
 ### Prerequisites
 
-- Go 1.19 or later
-- Basic familiarity with Go and YAML configuration files
+* Go 1.19 or later
+* Basic familiarity with Go and YAML configuration files
 
 ### Installation
 
@@ -50,7 +51,7 @@ Hermyx is a lightweight, high-performance HTTP reverse proxy and caching engine 
 git clone https://github.com/yourorg/hermyx.git
 cd hermyx
 go build -o hermyx ./cmd/hermyx
-````
+```
 
 ### Configuration
 
@@ -86,13 +87,29 @@ routes:
           - POST
 ```
 
-### Running Hermyx
+---
+
+## Running Hermyx
+
+To start the Hermyx proxy with a config file:
 
 ```bash
-./hermyx -config /path/to/config.yaml
+./hermyx up --config /path/to/config.yaml
 ```
 
-Starts the proxy on the configured port (default 8080).
+If no config is provided, it defaults to `./hermyx.config.yaml`.
+
+You can also see available commands:
+
+```bash
+./hermyx help
+```
+
+Or get help for a specific command:
+
+```bash
+./hermyx help up
+```
 
 ---
 
@@ -109,13 +126,13 @@ Starts the proxy on the configured port (default 8080).
 ## Project Structure
 
 ```
-engine/          # Core engine and proxy logic
-pkg/cache/       # In-memory cache implementation
+engine/           # Core engine and proxy logic
+pkg/cache/        # In-memory cache implementation
 pkg/cachemanager/ # Cache management and key generation
-pkg/models/      # Configuration and data models
+pkg/models/       # Configuration and data models
 pkg/utils/logger/ # Logger utility
 pkg/utils/regex/  # Regex utilities
-cmd/hermyx/      # CLI entry point
+cmd/hermyx/       # CLI entry point
 ```
 
 ---
@@ -132,7 +149,7 @@ cmd/hermyx/      # CLI entry point
 ## Contributing
 
 Contributions, issues, and feature requests are welcome!
-Feel free to check [issues page](https://github.com/spyder01/hermyx/issues).
+Feel free to check the [issues page](https://github.com/spyder01/hermyx/issues).
 Please follow the standard fork & pull request workflow.
 
 ---
@@ -151,4 +168,3 @@ For questions or support, open an issue or contact the maintainers.
 
 *Happy proxying with Hermyx!* 🚀
 
-```
