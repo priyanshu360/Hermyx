@@ -132,7 +132,7 @@ cmd/hermyx/      # CLI entry point
 ## Contributing
 
 Contributions, issues, and feature requests are welcome!
-Feel free to check [issues page](https://github.com/yourorg/hermyx/issues).
+Feel free to check [issues page](https://github.com/spyder01/hermyx/issues).
 Please follow the standard fork & pull request workflow.
 
 ---
