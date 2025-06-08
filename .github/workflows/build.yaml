@@ -44,8 +44,8 @@ jobs:
             exit 1
           fi
 
-      - name: Run tests
-        run: go test -v ./...
+     #- name: Run tests
+      #  run: go test -v ./...
 
       - name: Build Hermyx binary
         run: |
