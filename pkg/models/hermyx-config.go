@@ -33,6 +33,10 @@ type ServerConfig struct {
 	Port uint16 `yaml:"port"`
 }
 
+type StorageConfig struct {
+	Path string `yaml:"path"`
+}
+
 type RouteConfig struct {
 	Name    string       `yaml:"name"`
 	Path    string       `yaml:"path"`
@@ -43,8 +47,9 @@ type RouteConfig struct {
 }
 
 type HermyxConfig struct {
-	Log    *LogConfig    `yaml:"log"`
-	Server *ServerConfig `yaml:"server"`
-	Cache  *CacheConfig  `yaml:"cache"`
-	Routes []RouteConfig `yaml:"routes"`
+	Log     *LogConfig     `yaml:"log"`
+	Server  *ServerConfig  `yaml:"server"`
+	Cache   *CacheConfig   `yaml:"cache"`
+	Storage *StorageConfig `yaml:"storage"`
+	Routes  []RouteConfig  `yaml:"routes"`
 }
