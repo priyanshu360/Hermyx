@@ -1,170 +1,205 @@
-# Hermyx
+# 🌀 Hermyx
 
-[![Go Reference](https://pkg.go.dev/badge/github.com/yourorg/hermyx.svg)](https://pkg.go.dev/github.com/yourorg/hermyx)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Go Version](https://img.shields.io/badge/go-1.20+-blue)](https://golang.org/)
+[![Build](https://img.shields.io/badge/build-passing-brightgreen)]()
+[![Status](https://img.shields.io/badge/status-beta-orange)]()
 
-Hermyx is a lightweight, high-performance HTTP reverse proxy and caching engine written in Go. It proxies requests to backend servers with configurable route matching, filtering, and in-memory response caching.
-
----
-
-## Table of Contents
-
-* [Features](#features)
-* [Getting Started](#getting-started)
-
-  * [Prerequisites](#prerequisites)
-  * [Installation](#installation)
-  * [Configuration](#configuration)
-  * [Running Hermyx](#running-hermyx)
-* [How It Works](#how-it-works)
-* [Project Structure](#project-structure)
-* [Extending Hermyx](#extending-hermyx)
-* [Contributing](#contributing)
-* [License](#license)
-* [Contact](#contact)
+**Hermyx** is a blazing-fast, minimal reverse proxy with intelligent caching. Built using `fasthttp`, it gives you per-route configurability, graceful shutdown, and a clean YAML configuration system — perfect for modern microservices, edge routing, or lightweight API gateways.
 
 ---
 
-## Features
+## 🚀 Features
 
-* Configurable routes with regex-based path matching
-* Include/exclude filters to refine route matching
-* HTTP method filtering to exclude methods from caching
-* In-memory response caching with TTL and max content size controls
-* Customizable cache key generation
-* Fallback proxy for unmatched requests
-* Efficient HTTP handling using [fasthttp](https://github.com/valyala/fasthttp)
-* Extensible logging with configurable output
+* ⚡ Ultra-fast request handling with [`fasthttp`](https://github.com/valyala/fasthttp)
+* 🎯 Route-level proxy and cache control
+* 🧠 In-memory caching with TTL, capacity, and size limits
+* 🔍 Custom cache keys via `path`, `method`, `query`
+* 🪵 Flexible logging to file/stdout
+* ✨ YAML config for simple deployments
+* 🧹 Graceful shutdown with PID cleanup
 
 ---
 
-## Getting Started
-
-### Prerequisites
-
-* Go 1.19 or later
-* Basic familiarity with Go and YAML configuration files
-
-### Installation
+## 📦 Installation
+Currently you can only build from source:
 
 ```bash
-git clone https://github.com/yourorg/hermyx.git
+git clone https://github.com/spyder01/hermyx
 cd hermyx
 go build -o hermyx ./cmd/hermyx
 ```
 
-### Configuration
+---
 
-Hermyx is configured via a YAML file. Example:
+## ⚙️ CLI Usage
+
+```bash
+hermyx -config path/to/config.yaml
+```
+
+### CLI Flags
+
+| Flag       | Description                     | Required |
+| ---------- | ------------------------------- | -------- |
+| `-config`  | Path to your Hermyx YAML config | ✅ Yes    |
+
+
+---
+
+## 📄 Configuration Guide
+
+Hermyx is configured entirely through a YAML file.
+
+### Example
 
 ```yaml
-server:
-  port: 8080
-
-cache:
-  capacity: 1000          # Max cache entries
-  ttl: 300000000000       # Cache TTL in nanoseconds (300s)
-  maxContentSize: 1048576 # Max response size to cache (1MB)
-
 log:
+  toFile: true
+  filePath: "./hermyx.log"
   toStdout: true
   prefix: "[Hermyx]"
   flags: 0
 
+server:
+  port: 8080
+
+storage:
+  path: "./.hermyx"
+
+cache:
+  enabled: true
+  ttl: 5m
+  capacity: 1000
+  maxContentSize: 1048576
+  keyConfig:
+    type: ["path", "method", "query"]
+    excludeMethods: ["post", "put"]
+
 routes:
-  - path: "^/api/.*"
-    target: "http://localhost:9000"
-    include:
-      - "^/api/v1/.*"
-    exclude:
-      - "^/api/v1/private/.*"
+  - name: "user-api"
+    path: "^/api/users"
+    target: "localhost:3000"
+    include: [".*"]
+    exclude: ["^/api/users/private"]
     cache:
       enabled: true
-      ttl: 600000000000  # 600s
-      maxContentSize: 524288
+      ttl: 2m
+      capacity: 200
+      maxContentSize: 512000
       keyConfig:
-        excludeMethods:
-          - POST
+        type: ["path", "query"]
+        excludeMethods: ["post"]
 ```
 
 ---
 
-## Running Hermyx
+## 🧾 Configuration Reference
 
-To start the Hermyx proxy with a config file:
+### `log`
 
-```bash
-./hermyx up --config /path/to/config.yaml
-```
-
-If no config is provided, it defaults to `./hermyx.config.yaml`.
-
-You can also see available commands:
-
-```bash
-./hermyx help
-```
-
-Or get help for a specific command:
-
-```bash
-./hermyx help up
-```
+| Field      | Type     | Description                  |
+| ---------- | -------- | ---------------------------- |
+| `toFile`   | `bool`   | Write logs to a file         |
+| `filePath` | `string` | Log file path                |
+| `toStdout` | `bool`   | Also log to stdout           |
+| `prefix`   | `string` | Log line prefix              |
+| `flags`    | `int`    | Logging flags (Go log style) |
 
 ---
 
-## How It Works
+### `server`
 
-1. Incoming requests are matched against configured routes using regex on the request path.
-2. Routes apply include/exclude regex filters for fine-grained matching.
-3. For matched routes, caching is applied to successful (2xx) responses based on TTL and max content size.
-4. Cache keys are generated based on configurable rules involving request path, query, and method.
-5. Requests that don’t match any route are proxied raw to the host specified by the `Host` header.
+| Field  | Type  | Description       |
+| ------ | ----- | ----------------- |
+| `port` | `int` | Port to listen on |
 
 ---
 
-## Project Structure
+### `storage`
 
-```
-engine/           # Core engine and proxy logic
-pkg/cache/        # In-memory cache implementation
-pkg/cachemanager/ # Cache management and key generation
-pkg/models/       # Configuration and data models
-pkg/utils/logger/ # Logger utility
-pkg/utils/regex/  # Regex utilities
-cmd/hermyx/       # CLI entry point
-```
+| Field  | Type     | Description                   |
+| ------ | -------- | ----------------------------- |
+| `path` | `string` | Path for PID and temp storage |
 
 ---
 
-## Extending Hermyx
+### `cache`
 
-* Add new cache key generation strategies in `cachemanager`
-* Implement custom route filters or matching
-* Integrate advanced logging or metrics collection
-* Customize fallback proxy behavior
+| Field            | Type     | Description                          |
+| ---------------- | -------- | ------------------------------------ |
+| `enabled`        | `bool`   | Enable global cache                  |
+| `ttl`            | `string` | Default cache TTL (`1m`, `5s`, etc.) |
+| `capacity`       | `int`    | Max entries in cache                 |
+| `maxContentSize` | `int`    | Max size (in bytes) to cache         |
+| `keyConfig`      | `object` | See below                            |
 
----
+#### `keyConfig`
 
-## Contributing
-
-Contributions, issues, and feature requests are welcome!
-Feel free to check the [issues page](https://github.com/spyder01/hermyx/issues).
-Please follow the standard fork & pull request workflow.
-
----
-
-## License
-
-This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
+| Field            | Type       | Description                                 |
+| ---------------- | ---------- | ------------------------------------------- |
+| `type`           | `[]string` | Parts to form cache key (`path`, `query`)   |
+| `excludeMethods` | `[]string` | HTTP methods to skip caching (`post`, etc.) |
 
 ---
 
-## Contact
+### `routes`
 
-For questions or support, open an issue or contact the maintainers.
+| Field     | Type       | Description                                |
+| --------- | ---------- | ------------------------------------------ |
+| `name`    | `string`   | Name for logging/debugging                 |
+| `path`    | `string`   | Regex to match request path                |
+| `target`  | `string`   | Upstream server (host\:port)               |
+| `include` | `[]string` | Optional: only forward matching paths      |
+| `exclude` | `[]string` | Optional: exclude forwarding certain paths |
+| `cache`   | `object`   | Route-specific override for global cache   |
 
 ---
 
-*Happy proxying with Hermyx!* 🚀
+## 🔁 How It Works
 
+1. **Match**: Request path matched via route regex.
+2. **Filter**: Include/exclude filters applied.
+3. **Check Cache**: Cache eligibility based on method, size, etc.
+4. **Respond**:
+
+   * From cache if `HIT`
+   * Proxy to backend if `MISS`
+5. **Header**: Response includes `X-Hermyx-Cache: HIT` or `MISS`.
+
+---
+
+## 🧹 Graceful Shutdown
+
+Hermyx handles interrupts cleanly:
+
+* Captures `SIGINT` / `SIGTERM`
+* Deletes PID file
+* Logs shutdown
+* Flushes logs before exit
+
+---
+
+## 🧪 Debugging
+
+* Enable `toStdout` and set `flags: 0` for readable logs.
+* Match errors or miss logs help diagnose cache misses.
+* Cache TTL expiry logs for fine-tuning.
+
+---
+
+## 🧭 Roadmap
+
+* [ ] TLS support (HTTPS)
+* [ ] Prometheus metrics
+* [ ] Disk-based persistent cache backend
+* [ ] Built-in dashboard or admin API
+* [ ] Route hot-reloading
+
+---
+
+## 📜 License
+
+MIT © [Suhan Bangera](https://github.com/spyder01)
+
+---
