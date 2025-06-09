@@ -5,7 +5,7 @@
 [![Build](https://img.shields.io/badge/build-passing-brightgreen)]()
 [![Status](https://img.shields.io/badge/status-beta-orange)]()
 
-**Hermyx** is a blazing-fast, minimal reverse proxy with intelligent caching. Built using `fasthttp`, it gives you per-route configurability, graceful shutdown, and a clean YAML configuration system — perfect for modern microservices, edge routing, or lightweight API gateways.
+**Hermyx** is a blazing-fast, minimal reverse proxy with intelligent caching. Built using [`fasthttp`](https://github.com/valyala/fasthttp), it offers per-route configurability, graceful shutdown, and a clean YAML configuration system — perfect for modern microservices, edge routing, or lightweight API gateways.
 
 ---
 
@@ -22,7 +22,8 @@
 ---
 
 ## 📦 Installation
-Currently you can only build from source:
+
+Currently, Hermyx can be built from source:
 
 ```bash
 git clone https://github.com/spyder01/hermyx
@@ -35,15 +36,70 @@ go build -o hermyx ./cmd/hermyx
 ## ⚙️ CLI Usage
 
 ```bash
-hermyx -config path/to/config.yaml
+hermyx <command> [--config <path>]
 ```
 
-### CLI Flags
+### Available Commands
 
-| Flag       | Description                     | Required |
-| ---------- | ------------------------------- | -------- |
-| `-config`  | Path to your Hermyx YAML config | ✅ Yes    |
+| Command | Description                                    |
+| ------- | ---------------------------------------------- |
+| `up`    | Start the Hermyx reverse proxy                 |
+| `down`  | Shut down the running Hermyx server gracefully |
+| `help`  | Show help for a command                        |
 
+### Command Details
+
+#### `up`
+
+Start the Hermyx reverse proxy with the specified configuration file.
+
+```bash
+hermyx up --config path/to/hermyx.config.yaml
+```
+
+* `--config` (optional): Path to Hermyx config YAML file. Defaults to `./hermyx.config.yaml`.
+
+#### `down`
+
+Gracefully shut down the running Hermyx server.
+
+```bash
+hermyx down --config path/to/hermyx.config.yaml
+```
+
+* `--config` (optional): Path to Hermyx config YAML file. Defaults to `./hermyx.config.yaml`.
+
+#### `help`
+
+Show general help or command-specific help.
+
+```bash
+hermyx help
+hermyx help up
+hermyx help down
+```
+
+---
+
+### Examples
+
+Start Hermyx with a custom config:
+
+```bash
+hermyx up --config ./configs/prod.yaml
+```
+
+Stop Hermyx with the default config path:
+
+```bash
+hermyx down
+```
+
+Get help for the `up` command:
+
+```bash
+hermyx help up
+```
 
 ---
 
@@ -201,5 +257,3 @@ Hermyx handles interrupts cleanly:
 ## 📜 License
 
 MIT © [Suhan Bangera](https://github.com/spyder01)
-
----
