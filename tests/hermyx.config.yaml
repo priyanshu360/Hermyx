@@ -7,6 +7,9 @@ log:
   prefix: "[hermyx] "
   flags: 0
 
+storage:
+  path: "./"
+
 cache:
   type: "disk"
   enabled: true
