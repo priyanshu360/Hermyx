@@ -154,12 +154,17 @@ func (engine *HermyxEngine) matchRoute(path, method string) (*compiledRoute, boo
 }
 
 func (engine *HermyxEngine) handleCache(ctx *fasthttp.RequestCtx, cr *compiledRoute, key string) bool {
-	res, exists := engine.cacheManager.Get(key)
+	res, exists, err := engine.cacheManager.Get(key)
+	if err != nil {
+		engine.logger.Error(fmt.Sprintf("Error while accessing the cache: %w", err))
+		return false
+	}
+
 	if exists {
 		engine.logger.Info(fmt.Sprintf("Cache HIT for key %s (path %s)", key, string(ctx.Path())))
 		ctx.SetStatusCode(fasthttp.StatusOK)
 		ctx.Response.Header.Set("X-Hermyx-Cache", "HIT")
-		ctx.SetBody(res.([]byte))
+		ctx.SetBody(res)
 		return true
 	}
 	engine.logger.Info(fmt.Sprintf("Cache MISS for key %s (path %s)", key, string(ctx.Path())))

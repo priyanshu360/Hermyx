@@ -23,7 +23,7 @@ OUTPUT_PATH="$OUTPUT_DIR/${APP_NAME}${EXT}"
 mkdir -p "$OUTPUT_DIR"
 
 echo "🔧 Building $APP_NAME for $GOOS/$GOARCH..."
-GOOS=$GOOS GOARCH=$GOARCH go build -o "$OUTPUT_PATH" "$MAIN_PATH"
+GOOS=$GOOS GOARCH=$GOARCH go build -ldflags="-s -w" -o "$OUTPUT_PATH" "$MAIN_PATH"
 
 # Make executable if not Windows
 if [ "$GOOS" != "windows" ]; then

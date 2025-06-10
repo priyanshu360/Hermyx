@@ -8,6 +8,7 @@ log:
   flags: 0
 
 cache:
+  type: "disk"
   enabled: true
   capacity: 1000
   ttl: 10s

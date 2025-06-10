@@ -75,6 +75,10 @@ func InstantiateHermyxEngine(configPath string) *HermyxEngine {
 		logger_.Warn(fmt.Sprintf("Global cache max content size not specified, assigning the value of %d bytes", 1*1024*1024))
 		config.Cache.MaxContentSize = 1 * 1024 * 1024
 	}
+	if config.Cache.Type == "" {
+		logger_.Warn(fmt.Sprintf("Global cache type not specified, assigning the %s cache", models.CACHE_TYPE_MEMORY))
+		config.Cache.Type = models.CACHE_TYPE_MEMORY
+	}
 
 	if config.Storage == nil || config.Storage.Path == "" {
 		logger_.Warn("Storage path not specified assigning the default path...")
@@ -104,7 +108,21 @@ func InstantiateHermyxEngine(configPath string) *HermyxEngine {
 		}
 	}
 
-	cache_ := cache.NewCache(config.Cache.Capacity)
+	var cache_ cachemanager.ICache
+
+	switch config.Cache.Type {
+	case models.CACHE_TYPE_MEMORY:
+		cache_ = cache.NewCache(config.Cache.Capacity)
+
+	case models.CACHE_TYPE_DISK:
+		fmt.Println(config.Storage.Path, config.Cache.Capacity)
+		diskCache, err := cache.NewDiskCache(config.Storage.Path, config.Cache.Capacity)
+		if err != nil {
+			log.Fatalf("Unable to instantiate the disk-cache: %v", err)
+		}
+		cache_ = diskCache
+	}
+
 	cacheManager := cachemanager.NewCacheManager(cache_)
 
 	engine := &HermyxEngine{

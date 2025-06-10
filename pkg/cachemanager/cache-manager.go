@@ -10,8 +10,8 @@ import (
 )
 
 type ICache interface {
-	Set(key string, value any, ttl time.Duration)
-	Get(key string) (any, bool)
+	Set(key string, value []byte, ttl time.Duration) error
+	Get(key string) ([]byte, bool, error)
 	Delete(key string)
 }
 
@@ -51,11 +51,11 @@ func (cm *CacheManager) Resolve(engineConfig *models.CacheConfig, routeConfig *m
 	return config
 }
 
-func (cm *CacheManager) Set(key string, value any, ttl time.Duration) {
+func (cm *CacheManager) Set(key string, value []byte, ttl time.Duration) {
 	cm.cache.Set(key, value, ttl)
 }
 
-func (cm *CacheManager) Get(key string) (any, bool) {
+func (cm *CacheManager) Get(key string) ([]byte, bool, error) {
 	return cm.cache.Get(key)
 }
 

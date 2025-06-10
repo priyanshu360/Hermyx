@@ -8,7 +8,7 @@ import (
 
 type entry struct {
 	key       string
-	value     any
+	value     []byte
 	expiresAt time.Time
 	element   *list.Element
 }
@@ -31,7 +31,7 @@ func NewCache(capacity uint64) *Cache {
 	}
 }
 
-func (c *Cache) Set(key string, value any, ttl time.Duration) {
+func (c *Cache) Set(key string, value []byte, ttl time.Duration) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -39,7 +39,7 @@ func (c *Cache) Set(key string, value any, ttl time.Duration) {
 		e.value = value
 		e.expiresAt = time.Now().Add(ttl)
 		c.order.MoveToFront(e.element)
-		return
+		return nil
 	}
 
 	if len(c.items) >= int(c.capacity) {
@@ -53,9 +53,11 @@ func (c *Cache) Set(key string, value any, ttl time.Duration) {
 		expiresAt: time.Now().Add(ttl),
 		element:   elem,
 	}
+
+	return nil
 }
 
-func (c *Cache) Get(key string) (any, bool) {
+func (c *Cache) Get(key string) ([]byte, bool, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -64,11 +66,11 @@ func (c *Cache) Get(key string) (any, bool) {
 		if ok {
 			c.remove(key)
 		}
-		return nil, false
+		return nil, false, nil
 	}
 
 	c.order.MoveToFront(e.element)
-	return e.value, true
+	return e.value, true, nil
 }
 
 func (c *Cache) remove(key string) {

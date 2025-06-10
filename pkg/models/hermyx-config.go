@@ -8,6 +8,11 @@ const (
 	CACHE_KEY_QUERY  = "query"
 )
 
+const (
+	CACHE_TYPE_MEMORY = "memory"
+	CACHE_TYPE_DISK   = "disk"
+)
+
 type LogConfig struct {
 	ToFile   bool   `yaml:"toFile"`
 	FilePath string `yaml:"filePath"`
@@ -22,6 +27,7 @@ type CacheKeyConfig struct {
 }
 
 type CacheConfig struct {
+	Type           string          `yaml:"type"`
 	Enabled        bool            `yaml:"enabled"`
 	Ttl            time.Duration   `yaml:"ttl"`
 	Capacity       uint64          `yaml:"capacity"`

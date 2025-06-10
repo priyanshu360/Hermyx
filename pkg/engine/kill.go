@@ -24,7 +24,6 @@ func KillHermyx(configPath string) error {
 		return fmt.Errorf("failed to parse config file: %w", err)
 	}
 
-	// If storage path not set, derive it
 	if config.Storage == nil || config.Storage.Path == "" {
 		storageRoot, err := fs.GetUserAppDataDir("hermyx")
 		if err != nil {
