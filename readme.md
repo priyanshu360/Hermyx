@@ -283,8 +283,6 @@ Hermyx handles shutdown cleanly:
 
 * [ ] TLS support (HTTPS)
 * [ ] Prometheus metrics
-* [ ] Disk-based persistent cache backend
-* [ ] Redis clustering + failover support
 * [ ] Built-in dashboard or admin API
 * [ ] Route hot-reloading
 
