@@ -233,11 +233,19 @@ func (engine *HermyxEngine) storePid() error {
 }
 
 func (engine *HermyxEngine) cleanup() error {
+	var err error = nil
+
+	err = engine.cacheManager.Close()
+	if err != nil {
+		engine.logger.Error(fmt.Sprintf("Failed to close the cache due to: %w", err))
+	}
+	engine.logger.Info("Cache closed")
+
 	pidFile := filepath.Join(engine.config.Storage.Path, "hermyx.pid")
-	if err := os.Remove(pidFile); err != nil {
-		engine.logger.Warn(fmt.Sprintf("Failed to remove PID file: %v", err))
-		return err
+	err = os.Remove(pidFile)
+	if err != nil {
+		engine.logger.Error(fmt.Sprintf("Failed to remove PID file: %v", err))
 	}
 	engine.logger.Info("PID file removed.")
-	return nil
+	return err
 }

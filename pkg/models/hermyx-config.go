@@ -11,6 +11,7 @@ const (
 const (
 	CACHE_TYPE_MEMORY = "memory"
 	CACHE_TYPE_DISK   = "disk"
+	CACHE_TYPE_REDIS  = "redis"
 )
 
 type LogConfig struct {
@@ -26,6 +27,14 @@ type CacheKeyConfig struct {
 	ExcludeMethods []string `yaml:"excludeMethods"`
 }
 
+type RedisConfig struct {
+	Address      string        `yaml:"address"`
+	Password     string        `yaml:"password"`
+	DB           *int          `yaml:"db"`
+	DefaultTTL   time.Duration `yaml:"defaultTtl"`
+	KeyNamespace string        `yaml:"namespace"`
+}
+
 type CacheConfig struct {
 	Type           string          `yaml:"type"`
 	Enabled        bool            `yaml:"enabled"`
@@ -33,6 +42,7 @@ type CacheConfig struct {
 	Capacity       uint64          `yaml:"capacity"`
 	KeyConfig      *CacheKeyConfig `yaml:"keyConfig"`
 	MaxContentSize uint64          `yaml:"maxContentSize"`
+	Redis          *RedisConfig    `yaml:"redis"`
 }
 
 type ServerConfig struct {

@@ -10,11 +10,18 @@ log:
 storage:
   path: "./"
 
+
 cache:
-  type: "disk"
+  type: "memory"
   enabled: true
-  capacity: 1000
-  ttl: 10s
+  capacity: 1000               # Optional for Redis; keep for consistency
+  ttl: 10s                     # Default TTL fallback
+  redis:
+    address: "redis:6379"      # Hostname of the Redis container in docker-compose
+    password: ""               # Leave empty if no password is set
+    db: 0                      # Redis DB index
+    defaultTtl: 10s            # Used if per-key TTL is not specified
+    namespace: "hermyx:"       # Prefix for Redis keys (to avoid collision)
   keyConfig:
     type:
       - path

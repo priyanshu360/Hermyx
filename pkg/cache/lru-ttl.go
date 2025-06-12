@@ -101,3 +101,7 @@ func (c *Cache) Len() int {
 	defer c.mu.Unlock()
 	return len(c.items)
 }
+
+func (c *Cache) Close() error {
+	return nil
+}

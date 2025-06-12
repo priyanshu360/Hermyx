@@ -13,6 +13,7 @@ type ICache interface {
 	Set(key string, value []byte, ttl time.Duration) error
 	Get(key string) ([]byte, bool, error)
 	Delete(key string)
+	Close() error
 }
 
 type CacheManager struct {
@@ -78,4 +79,8 @@ func (cm *CacheManager) GetKey(cacheKeyConfig *models.CacheKeyConfig, ctx *fasth
 
 func (cm *CacheManager) Delete(key string) {
 	cm.cache.Delete(key)
+}
+
+func (cm *CacheManager) Close() error {
+	return cm.cache.Close()
 }

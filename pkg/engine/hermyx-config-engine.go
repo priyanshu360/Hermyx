@@ -115,12 +115,18 @@ func InstantiateHermyxEngine(configPath string) *HermyxEngine {
 		cache_ = cache.NewCache(config.Cache.Capacity)
 
 	case models.CACHE_TYPE_DISK:
-		fmt.Println(config.Storage.Path, config.Cache.Capacity)
 		diskCache, err := cache.NewDiskCache(config.Storage.Path, config.Cache.Capacity)
 		if err != nil {
 			log.Fatalf("Unable to instantiate the disk-cache: %v", err)
 		}
 		cache_ = diskCache
+	case models.CACHE_TYPE_REDIS:
+		if config.Cache.Redis == nil {
+			log.Fatalf("Redis config hasn't been provided.")
+		}
+
+		cache_ = cache.NewRedisCache(config.Cache.Redis)
+
 	}
 
 	cacheManager := cachemanager.NewCacheManager(cache_)
