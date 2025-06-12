@@ -12,9 +12,9 @@ storage:
 
 
 cache:
-  type: "memory"
+  type: "disk"
   enabled: true
-  capacity: 1000               # Optional for Redis; keep for consistency
+  capacity: 10000               # Optional for Redis; keep for consistency
   ttl: 10s                     # Default TTL fallback
   redis:
     address: "redis:6379"      # Hostname of the Redis container in docker-compose

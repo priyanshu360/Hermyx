@@ -15,11 +15,12 @@ const (
 )
 
 type LogConfig struct {
-	ToFile   bool   `yaml:"toFile"`
-	FilePath string `yaml:"filePath"`
-	ToStdout bool   `yaml:"toStdout"`
-	Prefix   string `yaml:"prefix"`
-	Flags    int    `yaml:"flags"`
+	ToFile       bool   `yaml:"toFile"`
+	FilePath     string `yaml:"filePath"`
+	ToStdout     bool   `yaml:"toStdout"`
+	Prefix       string `yaml:"prefix"`
+	Flags        int    `yaml:"flags"`
+	DebugEnabled bool   `yaml:"debugEnabled"`
 }
 
 type CacheKeyConfig struct {

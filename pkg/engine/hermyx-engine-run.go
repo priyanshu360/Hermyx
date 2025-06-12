@@ -43,7 +43,9 @@ func (engine *HermyxEngine) Run() {
 	engine.logger.Info(fmt.Sprintf("Hermyx engine starting on %s...", addr))
 
 	server := &fasthttp.Server{
-		Handler: engine.handleRequest,
+		Handler:          engine.handleRequest,
+		MaxConnsPerIP:    0,
+		DisableKeepalive: false,
 	}
 
 	stop := make(chan os.Signal, 1)
@@ -78,6 +80,7 @@ func (engine *HermyxEngine) Run() {
 	}
 
 	engine.logger.Info("Hermyx shut down gracefully.")
+	engine.logger.Close()
 }
 
 func (engine *HermyxEngine) handleRequest(ctx *fasthttp.RequestCtx) {

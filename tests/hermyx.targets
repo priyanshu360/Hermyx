@@ -1,0 +1,6 @@
+GET http://localhost:8080/hello
+GET http://localhost:8080/time
+GET http://localhost:8080/exceed
+GET http://localhost:8080/echo?msg=first
+GET http://localhost:8080/echo?msg=second
+GET http://localhost:8080/echo?msg=first
