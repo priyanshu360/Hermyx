@@ -15,11 +15,20 @@ Usage:
   hermyx <command> [options]
 
 Available Commands:
-  up        Start the Hermyx reverse proxy
+	up        Start the Hermyx reverse proxy
 	down 			Close the Hermyx reverse proxy
-  help      Show help for a command
+	init 			Scaffold hermyx config yaml.
+  	help      Show help for a command
 
 Run 'hermyx help <command>' for details on a specific command.`)
+}
+
+func printInitHelp() {
+	fmt.Println(`Usage:
+  hermyx init [--config <path>]
+
+Options:
+  --config   Path to Hermyx config YAML file (default: ./hermyx.config.yaml)`)
 }
 
 func printUpHelp() {
@@ -98,6 +107,27 @@ func main() {
 		}
 		fmt.Printf("Shut down hermyx server at %s \n", *configPath)
 
+	case "init":
+		runCmd := flag.NewFlagSet("init", flag.ExitOnError)
+		configPath := runCmd.String("config", "hermyx.config.yaml", "Path to configuration YAML file")
+
+		if err := runCmd.Parse(os.Args[2:]); err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to parse flags: %v\n", err)
+			os.Exit(1)
+		}
+
+		absPath, err := filepath.Abs(*configPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Unable to resolve config path: %v\n", err)
+			os.Exit(1)
+		}
+
+		err = engine.InitConfig(absPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Unable to scaffold hermyx config at %s: %v\n", *configPath, err)
+			os.Exit(1)
+		}
+
 	case "help":
 		if len(os.Args) == 2 {
 			printRootHelp()
@@ -107,6 +137,8 @@ func main() {
 				printUpHelp()
 			case "down":
 				printDownHelp()
+			case "init":
+				printInitHelp()
 			default:
 				fmt.Printf("Unknown help topic: %s\n", os.Args[2])
 				printRootHelp()

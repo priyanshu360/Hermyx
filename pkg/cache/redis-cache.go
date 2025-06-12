@@ -12,6 +12,7 @@ type RedisCache struct {
 	client     *redis.Client
 	namespace  string
 	defaultTTL time.Duration
+	ctx        context.Context
 }
 
 func NewRedisCache(config *models.RedisConfig) *RedisCache {
@@ -25,6 +26,7 @@ func NewRedisCache(config *models.RedisConfig) *RedisCache {
 		client:     client,
 		namespace:  config.KeyNamespace,
 		defaultTTL: config.DefaultTTL,
+		ctx:        context.Background(),
 	}
 }
 
@@ -32,11 +34,11 @@ func (r *RedisCache) Set(key string, value []byte, ttl time.Duration) error {
 	if ttl <= 0 {
 		ttl = r.defaultTTL
 	}
-	return r.client.Set(context.Background(), r.key(key), value, ttl).Err()
+	return r.client.Set(r.ctx, r.key(key), value, ttl).Err()
 }
 
 func (r *RedisCache) Get(key string) ([]byte, bool, error) {
-	val, err := r.client.Get(context.Background(), r.key(key)).Bytes()
+	val, err := r.client.Get(r.ctx, r.key(key)).Bytes()
 	if err == redis.Nil {
 		return nil, false, nil
 	} else if err != nil {
@@ -46,11 +48,11 @@ func (r *RedisCache) Get(key string) ([]byte, bool, error) {
 }
 
 func (r *RedisCache) Delete(key string) {
-	r.client.Del(context.Background(), r.key(key))
+	r.client.Del(r.ctx, r.key(key))
 }
 
 func (r *RedisCache) Len() int {
-	keys, err := r.client.Keys(context.Background(), r.namespace+"*").Result()
+	keys, err := r.client.Keys(r.ctx, r.namespace+"*").Result()
 	if err != nil {
 		return 0
 	}
@@ -64,3 +66,4 @@ func (r *RedisCache) key(k string) string {
 func (r *RedisCache) Close() error {
 	return r.client.Close()
 }
+

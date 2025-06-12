@@ -1,8 +1,8 @@
 # 🌀 Hermyx
 
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)  
-[![Go Version](https://img.shields.io/badge/go-1.20+-blue)](https://golang.org/)  
-[![Build](https://img.shields.io/badge/build-passing-brightgreen)]()  
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Go Version](https://img.shields.io/badge/go-1.20+-blue)](https://golang.org/)
+[![Build](https://img.shields.io/badge/build-passing-brightgreen)]()
 [![Status](https://img.shields.io/badge/status-beta-orange)]()
 
 **Hermyx** is a blazing-fast, minimal reverse proxy with intelligent caching. Built using [`fasthttp`](https://github.com/valyala/fasthttp), it offers per-route configurability, graceful shutdown, and a clean YAML configuration system — perfect for modern microservices, edge routing, or lightweight API gateways.
@@ -19,6 +19,7 @@
 * 🪵 Flexible logging to file/stdout
 * ✨ YAML config for simple deployments
 * 🧹 Graceful shutdown with PID cleanup
+* 🛠️ `init` command to scaffold config files
 
 ---
 
@@ -30,7 +31,7 @@ Currently, Hermyx can be built from source:
 git clone https://github.com/spyder01/hermyx
 cd hermyx
 go build -o hermyx ./cmd/hermyx
-````
+```
 
 ---
 
@@ -42,13 +43,26 @@ hermyx <command> [--config <path>]
 
 ### Available Commands
 
-| Command | Description                                     |
-| ------- | ----------------------------------------------- |
-| `up`    | Start the Hermyx reverse proxy                  |
-| `down`  | Shut down the running Hermyx server gracefully  |
-| `help`  | Show help for a command                         |
+| Command | Description                                      |
+| ------- | ------------------------------------------------ |
+| `up`    | Start the Hermyx reverse proxy                   |
+| `down`  | Shut down the running Hermyx server gracefully   |
+| `init`  | Scaffold a default Hermyx YAML config            |
+| `help`  | Show help for a command                          |
+
+---
 
 ### Command Details
+
+#### `init`
+
+Generate a default Hermyx configuration file.
+
+```bash
+hermyx init --config ./hermyx.config.yaml
+```
+
+If the file already exists, it will be overwritten. Useful for bootstrapping environments.
 
 #### `up`
 
@@ -74,6 +88,7 @@ Show general help or command-specific help.
 hermyx help
 hermyx help up
 hermyx help down
+hermyx help init
 ```
 
 ---
@@ -92,10 +107,10 @@ Stop Hermyx with the default config path:
 hermyx down
 ```
 
-Get help for the `up` command:
+Generate a default configuration file:
 
 ```bash
-hermyx help up
+hermyx init
 ```
 
 ---
@@ -156,13 +171,13 @@ routes:
 
 ### `log`
 
-| Field       | Type      | Description                   |
-| ----------- | --------- | ----------------------------- |
-| `toFile`    | `bool`    | Write logs to a file          |
-| `filePath`  | `string`  | Log file path                 |
-| `toStdout`  | `bool`    | Also log to stdout            |
-| `prefix`    | `string`  | Log line prefix               |
-| `flags`     | `int`     | Logging flags (Go log style)  |
+| Field       | Type     | Description                   |
+| ----------- | -------- | ----------------------------- |
+| `toFile`    | `bool`   | Write logs to a file          |
+| `filePath`  | `string` | Log file path                 |
+| `toStdout`  | `bool`   | Also log to stdout            |
+| `prefix`    | `string` | Log line prefix               |
+| `flags`     | `int`    | Logging flags (Go log style)  |
 
 ---
 
@@ -176,9 +191,9 @@ routes:
 
 ### `storage`
 
-| Field  | Type      | Description                    |
-| ------ | --------- | ------------------------------ |
-| `path` | `string`  | Path for PID and temp storage  |
+| Field  | Type     | Description                    |
+| ------ | -------- | ------------------------------ |
+| `path` | `string` | Path for PID and temp storage  |
 
 ---
 
@@ -206,23 +221,23 @@ routes:
 
 #### `keyConfig`
 
-| Field             | Type        | Description                                  |
-| ----------------- | ----------- | -------------------------------------------- |
-| `type`            | `[]string`  | Parts to form cache key (`path`, `query`)    |
-| `excludeMethods`  | `[]string`  | HTTP methods to skip caching (`post`, etc.)  |
+| Field            | Type       | Description                            |
+| ---------------- | ---------- | -------------------------------------- |
+| `type`           | `[]string` | Parts to form cache key (`path`, etc.) |
+| `excludeMethods` | `[]string` | HTTP methods to skip caching           |
 
 ---
 
 ### `routes`
 
-| Field      | Type        | Description                                             |
-| ---------- | ----------- | ------------------------------------------------------- |
-| `name`     | `string`    | Name for logging/debugging                              |
-| `path`     | `string`    | Regex to match request path                             |
-| `target`   | `string`    | Upstream server (host\:port)                            |
-| `include`  | `[]string`  | Optional: only forward matching paths                   |
-| `exclude`  | `[]string`  | Optional: exclude forwarding certain paths              |
-| `cache`    | `object`    | Route-specific cache override (TTL and key config only) |
+| Field     | Type        | Description                                             |
+| --------- | ----------- | ------------------------------------------------------- |
+| `name`    | `string`    | Name for logging/debugging                              |
+| `path`    | `string`    | Regex to match request path                             |
+| `target`  | `string`    | Upstream server (host\:port)                            |
+| `include` | `[]string`  | Optional: only forward matching paths                   |
+| `exclude` | `[]string`  | Optional: exclude forwarding certain paths              |
+| `cache`   | `object`    | Route-specific cache override (TTL and key config only) |
 
 ---
 
