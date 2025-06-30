@@ -176,10 +176,9 @@ func (engine *HermyxEngine) handleCache(ctx *fasthttp.RequestCtx, cr *compiledRo
 
 func (engine *HermyxEngine) proxyRequest(ctx *fasthttp.RequestCtx, cr *compiledRoute) error {
 	target := cr.Route.Target
-	addr := strings.TrimPrefix(strings.TrimPrefix(target, "http://"), "https://")
-	client := &fasthttp.HostClient{Addr: addr}
+	client := engine.getClientForTarget(target)
 
-	engine.logger.Info(fmt.Sprintf("Proxying request %s %s to backend %s", string(ctx.Method()), string(ctx.Path()), addr))
+	engine.logger.Info(fmt.Sprintf("Proxying request %s %s to backend %s", string(ctx.Method()), string(ctx.Path()), target))
 	return client.Do(&ctx.Request, &ctx.Response)
 }
 
@@ -207,7 +206,7 @@ func (engine *HermyxEngine) fallbackProxy(ctx *fasthttp.RequestCtx) error {
 		return nil
 	}
 
-	client := &fasthttp.HostClient{Addr: host}
+	client := engine.getClientForTarget(host)
 	engine.logger.Info(fmt.Sprintf("Fallback proxying to %s", host))
 	return client.Do(&ctx.Request, &ctx.Response)
 }

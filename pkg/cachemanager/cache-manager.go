@@ -71,6 +71,22 @@ func (cm *CacheManager) GetKey(cacheKeyConfig *models.CacheKeyConfig, ctx *fasth
 			keyParts = append(keyParts, string(ctx.Path()))
 		case models.CACHE_KEY_QUERY:
 			keyParts = append(keyParts, string(ctx.QueryArgs().QueryString()))
+		case models.CACHE_KEY_HEADER:
+			if cacheKeyConfig.Headers == nil || len(cacheKeyConfig.Headers) == 0 {
+				continue
+			}
+
+			for _, header := range cacheKeyConfig.Headers {
+				if header == nil {
+					continue
+				}
+
+				keyPart := string(ctx.Request.Header.Peek(header.Key))
+				if len(keyPart) != 0 {
+					keyParts = append(keyParts, keyPart)
+				}
+			}
+
 		}
 	}
 

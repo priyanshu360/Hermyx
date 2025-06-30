@@ -15,7 +15,7 @@
 * 🎯 Route-level proxy and cache control
 * 🧠 Caching options: in-memory, disk, or Redis-based
 * ⏱ TTL and capacity control per cache backend
-* 🔍 Custom cache keys via `path`, `method`, `query`
+* 🔍 Custom cache keys via `path`, `method`, `query`, and now even `header`
 * 🪵 Flexible logging to file/stdout
 * ✨ YAML config for simple deployments
 * 🧹 Graceful shutdown with PID cleanup
@@ -23,93 +23,11 @@
 
 ---
 
-## 📦 Installation
-
-Currently, Hermyx can be built from source:
-
-```bash
-git clone https://github.com/spyder01/hermyx
-cd hermyx
-go build -o hermyx ./cmd/hermyx
-```
-
----
-
-## ⚙️ CLI Usage
-
-```bash
-hermyx <command> [--config <path>]
-```
-
-### Available Commands
-
-| Command | Description                                      |
-| ------- | ------------------------------------------------ |
-| `up`    | Start the Hermyx reverse proxy                   |
-| `down`  | Shut down the running Hermyx server gracefully   |
-| `init`  | Scaffold a default Hermyx YAML config            |
-| `help`  | Show help for a command                          |
-
----
-
-### Command Details
-
-#### `init`
-
-Generate a default Hermyx configuration file.
-
-```bash
-hermyx init --config ./hermyx.config.yaml
-```
-
-If the file already exists, it will be overwritten. Useful for bootstrapping environments.
-
-#### `up`
-
-Start the Hermyx reverse proxy with the specified configuration file.
-
-```bash
-hermyx up --config path/to/hermyx.config.yaml
-```
-
-#### `down`
-
-Gracefully shut down the running Hermyx server.
-
-```bash
-hermyx down --config path/to/hermyx.config.yaml
-```
-
-#### `help`
-
-Show general help or command-specific help.
-
-```bash
-hermyx help
-hermyx help up
-hermyx help down
-hermyx help init
-```
-
----
-
 ## 🧪 Examples
-
-Start Hermyx with a custom config:
 
 ```bash
 hermyx up --config ./configs/prod.yaml
-```
-
-Stop Hermyx with the default config path:
-
-```bash
 hermyx down
-```
-
-Generate a default configuration file:
-
-```bash
 hermyx init
 ```
 
@@ -128,6 +46,7 @@ log:
   toStdout: true
   prefix: "[Hermyx]"
   flags: 0
+  debugEnabled: true
 
 server:
   port: 8080
@@ -137,7 +56,7 @@ storage:
 
 cache:
   enabled: true
-  type: "redis" # "memory", "disk", or "redis"
+  type: "redis"
   ttl: 5m
   capacity: 1000
   maxContentSize: 1048576
@@ -148,7 +67,10 @@ cache:
     defaultTtl: 10s
     namespace: "hermyx:"
   keyConfig:
-    type: ["path", "method", "query"]
+    type: ["path", "method", "query", "header"]
+    headers:
+      - key: "X-Request-User"
+      - key: "X-Device-ID"
     excludeMethods: ["post", "put"]
 
 routes:
@@ -161,7 +83,9 @@ routes:
       enabled: true
       ttl: 2m
       keyConfig:
-        type: ["path", "query"]
+        type: ["path", "query", "header"]
+        headers:
+          - key: "Authorization"
         excludeMethods: ["post"]
 ```
 
@@ -169,125 +93,53 @@ routes:
 
 ## 🧾 Configuration Reference
 
-### `log`
+### `cache.keyConfig`
 
-| Field       | Type     | Description                   |
-| ----------- | -------- | ----------------------------- |
-| `toFile`    | `bool`   | Write logs to a file          |
-| `filePath`  | `string` | Log file path                 |
-| `toStdout`  | `bool`   | Also log to stdout            |
-| `prefix`    | `string` | Log line prefix               |
-| `flags`     | `int`    | Logging flags (Go log style)  |
+| Field            | Type                | Description                                                  |
+| ---------------- | ------------------- | ------------------------------------------------------------ |
+| `type`           | `[]string`          | Parts to form cache key: `path`, `method`, `query`, `header` |
+| `excludeMethods` | `[]string`          | HTTP methods to skip caching                                 |
+| `headers`        | `[]HeaderConfig`    | List of headers to include if `header` is in `type`          |
 
----
+#### `HeaderConfig`
 
-### `server`
-
-| Field  | Type  | Description        |
-| ------ | ----- | ------------------ |
-| `port` | `int` | Port to listen on  |
-
----
-
-### `storage`
-
-| Field  | Type     | Description                    |
-| ------ | -------- | ------------------------------ |
-| `path` | `string` | Path for PID and temp storage  |
-
----
-
-### `cache`
-
-| Field             | Type      | Description                                                                                                                    |
-| ----------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `type`            | `string`  | Cache backend: `"memory"`, `"disk"`, or `"redis"` (**global-only**)                                                            |
-| `enabled`         | `bool`    | Enable global cache                                                                                                            |
-| `ttl`             | `string`  | Default cache TTL (`1m`, `5s`, etc.)                                                                                           |
-| `capacity`        | `int`     | Max entries (used in memory; optional in Redis)                                                                                |
-| `maxContentSize`  | `int`     | Max response body size to cache (ignored in Redis)                                                                             |
-| `redis`           | `object`  | Redis-specific configuration (only required if `type: redis`)                                                                  |
-| `keyConfig`       | `object`  | See below                                                                                                                      |
-
-#### `redis`
-
-| Field         | Type     | Description                              |
-| ------------- | -------- | ---------------------------------------- |
-| `address`     | `string` | Redis server address (`host:port`)       |
-| `password`    | `string` | Redis password (optional)                |
-| `db`          | `int`    | Redis DB index (e.g. `0`)                |
-| `defaultTtl`  | `string` | Default TTL for Redis entries            |
-| `namespace`   | `string` | Prefix for Redis keys (for isolation)    |
-
-#### `keyConfig`
-
-| Field            | Type       | Description                            |
-| ---------------- | ---------- | -------------------------------------- |
-| `type`           | `[]string` | Parts to form cache key (`path`, etc.) |
-| `excludeMethods` | `[]string` | HTTP methods to skip caching           |
-
----
-
-### `routes`
-
-| Field     | Type        | Description                                             |
-| --------- | ----------- | ------------------------------------------------------- |
-| `name`    | `string`    | Name for logging/debugging                              |
-| `path`    | `string`    | Regex to match request path                             |
-| `target`  | `string`    | Upstream server (host\:port)                            |
-| `include` | `[]string`  | Optional: only forward matching paths                   |
-| `exclude` | `[]string`  | Optional: exclude forwarding certain paths              |
-| `cache`   | `object`    | Route-specific cache override (TTL and key config only) |
+| Field | Type     | Description                        |
+| ----- | -------- | ---------------------------------- |
+| `key` | `string` | Header name to include in the key  |
 
 ---
 
 ## 🔁 How It Works
 
 1. **Match**: Request path matched via route regex
+
 2. **Filter**: Include/exclude filters applied
+
 3. **Cache**:
 
    * Skip cache based on method or config
-   * Key generated from selected parts (path, method, query)
+   * Key generated from selected parts:
+
+     * `path` → request path
+     * `method` → HTTP verb
+     * `query` → query parameters
+     * `header` → specific headers (e.g. `X-User-ID`, `Authorization`)
    * Cache lookup (Redis, memory, or disk)
+
 4. **Respond**:
 
    * Serve from cache if hit
    * Otherwise proxy request to target
    * Store response in cache if eligible
+
 5. **Header**: Response includes `X-Hermyx-Cache: HIT` or `MISS`
-
----
-
-## 🧹 Graceful Shutdown
-
-Hermyx handles shutdown cleanly:
-
-* Captures `SIGINT` / `SIGTERM`
-* Deletes PID file
-* Logs shutdown
-* Flushes logs
 
 ---
 
 ## 🧪 Debugging
 
 * Enable `toStdout` and use `flags: 0` for human-readable logs
-* Use `X-Hermyx-Cache` header to inspect cache behavior
-* Use route-specific TTL for aggressive or lenient caching
+* Use `X-Hermyx-Cache` response header to check cache behavior
+* Add custom headers like `X-User-ID` or `Authorization` for user-specific cache keys
 * Redis TTL expiry observable via `redis-cli TTL <key>`
 
----
-
-## 🧭 Roadmap
-
-* [ ] TLS support (HTTPS)
-* [ ] Prometheus metrics
-* [ ] Built-in dashboard or admin API
-* [ ] Route hot-reloading
-
----
-
-## 📜 License
-
-MIT © [Suhan Bangera](https://github.com/spyder01)

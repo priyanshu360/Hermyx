@@ -26,8 +26,11 @@ cache:
     type:
       - path
       - method
+      - header
     excludeMethods:
       - OPTIONS
+    headers:
+      - key: "CONTENT-TYPE"
 
 routes:
   - path: "^/hello$"

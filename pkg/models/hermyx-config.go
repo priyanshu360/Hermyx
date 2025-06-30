@@ -6,6 +6,7 @@ const (
 	CACHE_KEY_PATH   = "path"
 	CACHE_KEY_METHOD = "method"
 	CACHE_KEY_QUERY  = "query"
+	CACHE_KEY_HEADER = "header"
 )
 
 const (
@@ -23,9 +24,14 @@ type LogConfig struct {
 	DebugEnabled bool   `yaml:"debugEnabled"`
 }
 
+type HeaderCacheKeyConfig struct {
+	Key string `yaml:"key"`
+}
+
 type CacheKeyConfig struct {
-	Type           []string `yaml:"type"`
-	ExcludeMethods []string `yaml:"excludeMethods"`
+	Type           []string                `yaml:"type"`
+	ExcludeMethods []string                `yaml:"excludeMethods"`
+	Headers        []*HeaderCacheKeyConfig `yaml:"headers"`
 }
 
 type RedisConfig struct {

@@ -2,7 +2,6 @@ package engine
 
 import (
 	"fmt"
-	"gopkg.in/yaml.v3"
 	"hermyx/pkg/cache"
 	"hermyx/pkg/cachemanager"
 	"hermyx/pkg/models"
@@ -14,6 +13,10 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
+
+	"github.com/valyala/fasthttp"
+	"gopkg.in/yaml.v3"
 )
 
 type compiledRoute struct {
@@ -30,6 +33,7 @@ type HermyxEngine struct {
 	compiledRoutes []compiledRoute
 	configPath     string
 	pid            uint64
+	hostClients    map[string]*fasthttp.HostClient
 }
 
 func InstantiateHermyxEngine(configPath string) *HermyxEngine {
@@ -137,9 +141,25 @@ func InstantiateHermyxEngine(configPath string) *HermyxEngine {
 		cacheManager: cacheManager,
 		configPath:   configPath,
 		pid:          uint64(os.Getpid()),
+		hostClients:  make(map[string]*fasthttp.HostClient),
 	}
 
 	engine.compileRoutes()
 
 	return engine
+}
+
+func (engine *HermyxEngine) getClientForTarget(target string) *fasthttp.HostClient {
+	addr := strings.TrimPrefix(strings.TrimPrefix(target, "http://"), "https://")
+
+	if client, ok := engine.hostClients[addr]; ok {
+		return client
+	}
+
+	client := &fasthttp.HostClient{
+		Addr:     addr,
+		MaxConns: 10000, // Tune this
+	}
+	engine.hostClients[addr] = client
+	return client
 }

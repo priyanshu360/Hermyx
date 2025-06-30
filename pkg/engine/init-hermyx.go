@@ -47,8 +47,13 @@ func InitConfig(configPath string) error {
 			Capacity:       1000,
 			MaxContentSize: 1048576,
 			KeyConfig: &models.CacheKeyConfig{
-				Type:           []string{"path", "method", "query"},
+				Type:           []string{"path", "method", "query", "header"},
 				ExcludeMethods: []string{"post", "put"},
+				Headers: []*models.HeaderCacheKeyConfig{
+					{
+						"x-device-id",
+					},
+				},
 			},
 		},
 		Routes: []models.RouteConfig{

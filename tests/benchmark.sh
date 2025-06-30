@@ -1,7 +1,7 @@
 #!/bin/bash
 # Set the base URL
 HERMYX_URL="http://localhost:8080"
-RATE=44000           # requests per second
+RATE=10000           # requests per second
 DURATION=10s       # test duration
 TIMESTAMP=$(date +"%Y%m%d-%H%M%S")
 TARGETS_FILE="hermyx.targets"
