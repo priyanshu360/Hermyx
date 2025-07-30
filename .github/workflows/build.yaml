@@ -22,10 +22,10 @@ jobs:
     - name: Build binary
       run: |
         mkdir -p bin
-        go build -o bin/myapp ./cmd/main.go
+        go build -o bin/hermyx ./cmd/main.go
 
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
         name: myapp-binary
-        path: bin/myapp
+        path: bin/hermyx
