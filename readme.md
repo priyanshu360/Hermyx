@@ -56,7 +56,7 @@ storage:
 
 cache:
   enabled: true
-  type: "redis"
+  type: "redis" # could be "disk" or "memory" too.
   ttl: 5m
   capacity: 1000
   maxContentSize: 1048576
