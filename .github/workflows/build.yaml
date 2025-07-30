@@ -22,7 +22,7 @@ jobs:
     - name: Build binary
       run: |
         mkdir -p bin
-        go build -o bin/myapp ./cmd/go
+        go build -o bin/myapp ./cmd/main.go
 
     - name: Upload artifact
       uses: actions/upload-artifact@v4
