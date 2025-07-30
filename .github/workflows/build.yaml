@@ -1,62 +1,31 @@
-name: Go CI - Multi OS
+name: Build Go Application
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
   pull_request:
-    branches:
-      - main
+    branches: [ main ]
 
 jobs:
   build:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-        go-version: ['1.24.3']
+    runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
+    - name: Checkout code
+      uses: actions/checkout@v3
 
-      - name: Set up Go
-        uses: actions/setup-go@v4
-        with:
-          go-version: ${{ matrix.go-version }}
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'  # Adjust this to your Go version
 
-      - name: Cache Go modules
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
+    - name: Build binary
+      run: |
+        mkdir -p bin
+        go build -o bin/myapp ./cmd/go
 
-      - name: Verify gofmt formatting
-        run: |
-          if ! gofmt -l . | grep -q .; then
-            echo "Code is properly formatted"
-          else
-            echo "Run 'gofmt -w .' to fix formatting"
-            exit 1
-          fi
-
-     #- name: Run tests
-      #  run: go test -v ./...
-
-      - name: Build Hermyx binary
-        run: |
-          if [[ "$RUNNER_OS" == "Windows" ]]; then
-            go build -o hermyx.exe ./cmd/hermyx
-          else
-            go build -o hermyx ./cmd/hermyx
-          fi
-
-      - name: Upload binary artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: hermyx-binary-${{ matrix.os }}
-          path: ${{ runner.os == 'Windows' && 'hermyx.exe' || 'hermyx' }}
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: myapp-binary
+        path: bin/myapp
