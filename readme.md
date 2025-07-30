@@ -277,6 +277,6 @@ PRs, bug reports, and ideas are welcome! Just fork and open a PR.
 
 ## 📄 License
 
-This project is licensed under the (MIT License)[./LICENSE].
+This project is licensed under the [MIT License](./LICENSE).
 
 
