@@ -5,25 +5,39 @@
 [![Build](https://img.shields.io/badge/build-passing-brightgreen)]()
 [![Status](https://img.shields.io/badge/status-beta-orange)]()
 
-**Hermyx** is a blazing-fast, minimal reverse proxy with intelligent caching. Built using [`fasthttp`](https://github.com/valyala/fasthttp), it offers per-route configurability, graceful shutdown, and a clean YAML configuration system — perfect for modern microservices, edge routing, or lightweight API gateways.
+**Hermyx** is a blazing-fast, minimal reverse proxy with intelligent caching. Built on top of [`fasthttp`](https://github.com/valyala/fasthttp), it offers route-specific caching rules, graceful shutdown, flexible logging, and a clean YAML configuration — perfect for microservices, edge routing, or lightweight API gateways.
 
 ---
 
 ## 🚀 Features
 
-* ⚡ Ultra-fast request handling with [`fasthttp`](https://github.com/valyala/fasthttp)
-* 🎯 Route-level proxy and cache control
-* 🧠 Caching options: in-memory, disk, or Redis-based
-* ⏱ TTL and capacity control per cache backend
-* 🔍 Custom cache keys via `path`, `method`, `query`, and now even `header`
-* 🪵 Flexible logging to file/stdout
-* ✨ YAML config for simple deployments
-* 🧹 Graceful shutdown with PID cleanup
-* 🛠️ `init` command to scaffold config files
+* ⚡ **High Performance**: Powered by `fasthttp`, optimized for low-latency proxying.
+* 🎯 **Per-Route Caching & Proxying**: Control cache behavior and target routing at the route level.
+* 🧠 **Pluggable Caching Backends**: Choose between in-memory, disk-based, or Redis caching.
+* ⏱ **TTL & Capacity Management**: Fine-grained control over cache expiry and size limits.
+* 🗝️ **Custom Cache Keys**: Use `path`, `method`, `query`, and request `headers` to build smart cache keys.
+* 🪵 **Flexible Logging**: Log to file and/or stdout with custom formats and prefixes.
+* ✨ **Zero-Hassle YAML Config**: Simple, clean, and declarative.
+* 🧹 **Graceful Shutdown**: Includes PID file management and safe cleanup.
+* 🛠️ **Built-In Init Command**: Quickly scaffold a default config with `hermyx init`.
 
 ---
 
-## 🧪 Examples
+## ⚙️ Installation
+
+> Coming soon as a prebuilt binary and via `go install`.
+
+For now:
+
+```bash
+git clone https://github.com/your-username/hermyx.git
+cd hermyx
+go build -o hermyx ./cmd/go
+```
+
+---
+
+## 📦 Usage
 
 ```bash
 hermyx up --config ./configs/prod.yaml
@@ -33,9 +47,9 @@ hermyx init
 
 ---
 
-## 📄 Configuration Guide
+## 📄 Configuration Overview
 
-Hermyx is configured entirely through a YAML file.
+Hermyx is entirely configured via a single YAML file.
 
 ### Example
 
@@ -56,7 +70,7 @@ storage:
 
 cache:
   enabled: true
-  type: "redis" # could be "disk" or "memory" too.
+  type: "redis"        # Options: "memory", "disk", "redis"
   ttl: 5m
   capacity: 1000
   maxContentSize: 1048576
@@ -91,55 +105,130 @@ routes:
 
 ---
 
+## 💡 Cache Types
+
+Hermyx supports multiple caching backends. Choose one depending on your use case:
+
+| Type     | Description                                        |
+| -------- | -------------------------------------------------- |
+| `memory` | In-memory LRU cache (fastest, non-persistent)      |
+| `disk`   | Persistent file-based cache stored on disk         |
+| `redis`  | Centralized cache with TTL support and namespacing |
+
+---
+
 ## 🧾 Configuration Reference
 
-### `cache.keyConfig`
+### 🔹 `log`
 
-| Field            | Type                | Description                                                  |
-| ---------------- | ------------------- | ------------------------------------------------------------ |
-| `type`           | `[]string`          | Parts to form cache key: `path`, `method`, `query`, `header` |
-| `excludeMethods` | `[]string`          | HTTP methods to skip caching                                 |
-| `headers`        | `[]HeaderConfig`    | List of headers to include if `header` is in `type`          |
+| Field          | Type   | Description            |
+| -------------- | ------ | ---------------------- |
+| `toFile`       | bool   | Write logs to a file   |
+| `filePath`     | string | Path to log file       |
+| `toStdout`     | bool   | Write logs to stdout   |
+| `prefix`       | string | Log line prefix        |
+| `flags`        | int    | Go-style log flags     |
+| `debugEnabled` | bool   | Print extra debug logs |
 
-#### `HeaderConfig`
+### 🔹 `server`
 
-| Field | Type     | Description                        |
-| ----- | -------- | ---------------------------------- |
-| `key` | `string` | Header name to include in the key  |
+| Field  | Type | Description       |
+| ------ | ---- | ----------------- |
+| `port` | int  | Port to listen on |
+
+### 🔹 `storage`
+
+| Field  | Type   | Description                |
+| ------ | ------ | -------------------------- |
+| `path` | string | Path for storing PID, etc. |
+
+### 🔹 `cache`
+
+| Field            | Type        | Description                             |
+| ---------------- | ----------- | --------------------------------------- |
+| `enabled`        | bool        | Enable/disable global caching           |
+| `type`           | string      | One of `memory`, `disk`, or `redis`     |
+| `ttl`            | duration    | Global default TTL for cache entries    |
+| `capacity`       | int         | Max cache entries (in memory/disk)      |
+| `maxContentSize` | int         | Max body size (bytes) to store in cache |
+| `keyConfig`      | KeyConfig   | Rules for generating cache keys         |
+| `redis`          | RedisConfig | Redis-specific configuration            |
+
+### 🔹 `routes`
+
+| Field     | Type             | Description                              |
+| --------- | ---------------- | ---------------------------------------- |
+| `name`    | string           | Route identifier                         |
+| `path`    | string           | Regex pattern for matching request paths |
+| `target`  | string           | Upstream target address                  |
+| `include` | \[]string        | List of sub-paths to include             |
+| `exclude` | \[]string        | List of sub-paths to exclude             |
+| `cache`   | CacheRouteConfig | Route-specific cache settings            |
+
+### 🔹 `KeyConfig`
+
+| Field            | Type            | Description                                                        |
+| ---------------- | --------------- | ------------------------------------------------------------------ |
+| `type`           | \[]string       | Which parts to include in key: `path`, `method`, `query`, `header` |
+| `excludeMethods` | \[]string       | HTTP methods to ignore for caching (e.g. `POST`)                   |
+| `headers`        | \[]HeaderConfig | Specific headers to include in the cache key                       |
+
+### 🔹 `HeaderConfig`
+
+| Field | Type   | Description            |
+| ----- | ------ | ---------------------- |
+| `key` | string | Header name to include |
 
 ---
 
 ## 🔁 How It Works
 
-1. **Match**: Request path matched via route regex
+1. **Route Match**: Request is matched to a route using regex.
+2. **Filter**: Include/exclude patterns are evaluated.
+3. **Caching**:
 
-2. **Filter**: Include/exclude filters applied
+   * Method or config can skip caching.
+   * Cache key is built using selected components.
+   * Cache is checked (in-memory, disk, or Redis).
+4. **Proxy**:
 
-3. **Cache**:
+   * If cache hit, serve response.
+   * If miss, proxy request and cache result if allowed.
+5. **Response**:
 
-   * Skip cache based on method or config
-   * Key generated from selected parts:
-
-     * `path` → request path
-     * `method` → HTTP verb
-     * `query` → query parameters
-     * `header` → specific headers (e.g. `X-User-ID`, `Authorization`)
-   * Cache lookup (Redis, memory, or disk)
-
-4. **Respond**:
-
-   * Serve from cache if hit
-   * Otherwise proxy request to target
-   * Store response in cache if eligible
-
-5. **Header**: Response includes `X-Hermyx-Cache: HIT` or `MISS`
+   * Adds `X-Hermyx-Cache: HIT` or `MISS` header.
 
 ---
 
-## 🧪 Debugging
+## 🐞 Debugging Tips
 
-* Enable `toStdout` and use `flags: 0` for human-readable logs
-* Use `X-Hermyx-Cache` response header to check cache behavior
-* Add custom headers like `X-User-ID` or `Authorization` for user-specific cache keys
-* Redis TTL expiry observable via `redis-cli TTL <key>`
+* Enable `log.toStdout: true` and set `flags: 0` for clear log output.
+* Inspect cache behavior using the `X-Hermyx-Cache` response header.
+* For Redis, observe key TTL using:
 
+```bash
+redis-cli --ttl hermyx:<cache-key>
+```
+
+* Use meaningful request headers (like `X-User-ID` or `Authorization`) to build user-specific cache keys.
+
+---
+
+## 📌 Roadmap
+
+* [ ] Add CLI auto-update
+* [ ] Hot config reloading
+* [ ] Built-in metrics via Prometheus
+* [ ] Plugin system for auth/middleware
+
+---
+
+## 🧑‍💻 Contributing
+
+PRs, bug reports, and ideas are welcome! Just fork and open a PR.
+
+---
+
+## 📄 License
+
+MIT © [Suhan Bangera](https://github.com/suhanbangera)
