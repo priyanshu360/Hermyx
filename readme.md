@@ -1,9 +1,6 @@
 # 🌀 Hermyx
 
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Go Version](https://img.shields.io/badge/go-1.20+-blue)](https://golang.org/)
-[![Build](https://img.shields.io/badge/build-passing-brightgreen)]()
-[![Status](https://img.shields.io/badge/status-beta-orange)]()
+&#x20; &#x20;
 
 **Hermyx** is a blazing-fast, minimal reverse proxy with intelligent caching. Built on top of [`fasthttp`](https://github.com/valyala/fasthttp), it offers route-specific caching rules, graceful shutdown, flexible logging, and a clean YAML configuration — perfect for microservices, edge routing, or lightweight API gateways.
 
@@ -15,8 +12,8 @@
 * 🎯 **Per-Route Caching & Proxying**: Control cache behavior and target routing at the route level.
 * 🧠 **Pluggable Caching Backends**: Choose between in-memory, disk-based, or Redis caching.
 * ⏱ **TTL & Capacity Management**: Fine-grained control over cache expiry and size limits.
-* 🗝️ **Custom Cache Keys**: Use `path`, `method`, `query`, and request `headers` to build smart cache keys.
-* 🪵 **Flexible Logging**: Log to file and/or stdout with custom formats and prefixes.
+* 😑 **Custom Cache Keys**: Use `path`, `method`, `query`, and request `headers` to build smart cache keys.
+* 🩵 **Flexible Logging**: Log to file and/or stdout with custom formats and prefixes.
 * ✨ **Zero-Hassle YAML Config**: Simple, clean, and declarative.
 * 🧹 **Graceful Shutdown**: Includes PID file management and safe cleanup.
 * 🛠️ **Built-In Init Command**: Quickly scaffold a default config with `hermyx init`.
@@ -47,6 +44,55 @@ hermyx init
 
 ---
 
+## ⚖️ CLI Help
+
+```bash
+hermyx - blazing fast reverse proxy with smart caching
+
+Usage:
+  hermyx <command> [options]
+
+Available Commands:
+  up        Start the Hermyx reverse proxy
+  down      Close the Hermyx reverse proxy
+  init      Scaffold hermyx config yaml.
+  help      Show help for a command
+
+Run 'hermyx help <command>' for details on a specific command.
+```
+
+### `hermyx up`
+
+```bash
+Usage:
+  hermyx up [--config <path>]
+
+Options:
+  --config   Path to Hermyx config YAML file (default: ./hermyx.config.yaml)
+```
+
+### `hermyx down`
+
+```bash
+Usage:
+  hermyx down [--config <path>]
+
+Options:
+  --config   Path to Hermyx config YAML file (default: ./hermyx.config.yaml)
+```
+
+### `hermyx init`
+
+```bash
+Usage:
+  hermyx init [--config <path>]
+
+Options:
+  --config   Path to Hermyx config YAML file (default: ./hermyx.config.yaml)
+```
+
+---
+
 ## 📄 Configuration Overview
 
 Hermyx is entirely configured via a single YAML file.
@@ -70,7 +116,7 @@ storage:
 
 cache:
   enabled: true
-  type: "redis"        # Options: "memory", "disk", "redis"
+  type: "redis"
   ttl: 5m
   capacity: 1000
   maxContentSize: 1048576
@@ -117,7 +163,7 @@ Hermyx supports multiple caching backends. Choose one depending on your use case
 
 ---
 
-## 🧾 Configuration Reference
+## 📜 Configuration Reference
 
 ### 🔹 `log`
 
@@ -181,7 +227,7 @@ Hermyx supports multiple caching backends. Choose one depending on your use case
 
 ---
 
-## 🔁 How It Works
+## 🔀 How It Works
 
 1. **Route Match**: Request is matched to a route using regex.
 2. **Filter**: Include/exclude patterns are evaluated.
@@ -200,7 +246,7 @@ Hermyx supports multiple caching backends. Choose one depending on your use case
 
 ---
 
-## 🐞 Debugging Tips
+## 🧾 Debugging Tips
 
 * Enable `log.toStdout: true` and set `flags: 0` for clear log output.
 * Inspect cache behavior using the `X-Hermyx-Cache` response header.
