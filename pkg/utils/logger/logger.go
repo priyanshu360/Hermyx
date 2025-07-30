@@ -9,8 +9,6 @@ import (
 	"path/filepath"
 )
 
-// --- AsyncWriter ---
-
 type AsyncWriter struct {
 	ch   chan []byte
 	done chan struct{}
@@ -37,7 +35,7 @@ func (a *AsyncWriter) Write(p []byte) (int, error) {
 	select {
 	case a.ch <- cp:
 	default:
-		// buffer full – drop log
+		// buffer full–drop log
 	}
 	return len(p), nil
 }
@@ -47,7 +45,6 @@ func (a *AsyncWriter) Close() {
 	<-a.done
 }
 
-// --- Logger ---
 
 type Logger struct {
 	file        *os.File
