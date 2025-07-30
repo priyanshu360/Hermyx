@@ -277,4 +277,4 @@ PRs, bug reports, and ideas are welcome! Just fork and open a PR.
 
 ## 📄 License
 
-MIT © [Suhan Bangera](https://github.com/suhanbangera)
+MIT © [Suhan Bangera](https://github.com/Spyder01)
