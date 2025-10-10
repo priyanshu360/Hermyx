@@ -3,9 +3,10 @@ package main
 import (
 	"flag"
 	"fmt"
-	"hermyx/pkg/engine"
 	"os"
 	"path/filepath"
+
+	"hermyx/pkg/engine"
 )
 
 func printRootHelp() {
@@ -18,7 +19,8 @@ Available Commands:
 	up        Start the Hermyx reverse proxy
 	down 			Close the Hermyx reverse proxy
 	init 			Scaffold hermyx config yaml.
-  	help      Show help for a command
+  	help      		Show help for a command
+  	version      		Display hermyx version
 
 Run 'hermyx help <command>' for details on a specific command.`)
 }
@@ -45,6 +47,17 @@ func printDownHelp() {
 
 Options:
   --config   Path to Hermyx config YAML file (default: ./hermyx.config.yaml)`)
+}
+
+func printVersionHelp() {
+	fmt.Println(`Usage:
+  hermyx version`)
+}
+
+const Version = "0.1.0"
+
+func printVersion() {
+	fmt.Printf("Hermyx version: %s", Version)
 }
 
 func main() {
@@ -128,6 +141,9 @@ func main() {
 			os.Exit(1)
 		}
 
+	case "version":
+		printVersion()
+
 	case "help":
 		if len(os.Args) == 2 {
 			printRootHelp()
@@ -139,6 +155,8 @@ func main() {
 				printDownHelp()
 			case "init":
 				printInitHelp()
+			case "version":
+				printVersionHelp()
 			default:
 				fmt.Printf("Unknown help topic: %s\n", os.Args[2])
 				printRootHelp()
