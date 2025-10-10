@@ -6,6 +6,38 @@
 
 ---
 
+## 🎃 Hacktoberfest 2025
+
+🎉 **Hermyx is participating in [Hacktoberfest 2025](https://hacktoberfest.com)!**  
+We welcome contributions from developers of all experience levels.
+
+If you're new to open source or Go, this is a great place to start.  
+We have issues labeled **`good first issue`**, **`help wanted`**, and **`hacktoberfest`** to guide you.
+
+> 💡 All merged, approved, or labeled PRs (`hacktoberfest-accepted`) count towards your Hacktoberfest contributions!
+
+### 🧩 How to Participate
+
+1. **Star** the repo to show support 🌟  
+2. **Fork** this repository  
+3. **Pick an issue** labeled:
+   - `good first issue` → beginner-friendly
+   - `help wanted` → needs extra attention
+   - `enhancement` → new features
+4. **Create a branch** for your changes  
+5. **Submit a Pull Request** with a clear description  
+6. Once merged, your contribution will count toward Hacktoberfest!
+
+### 🪄 Example Ideas for Contributions
+
+- Add tests for cache, proxy, or logging components  
+- Improve error handling or config validation  
+- Fix documentation typos or improve examples  
+- Add small CLI enhancements (`--version`, better help text)  
+- Contribute disk/Redis cache optimizations  
+
+---
+
 ## 🚀 Features
 
 * ⚡ **High Performance**: Powered by `fasthttp`, optimized for low-latency proxying.
