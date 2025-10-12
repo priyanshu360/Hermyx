@@ -14,7 +14,7 @@ GOARCH=${GOARCH:-$(go env GOARCH)}
 # File extension for Windows
 EXT=""
 if [ "$GOOS" == "windows" ]; then
-  EXT=".exe"
+	EXT=".exe"
 fi
 
 OUTPUT_PATH="$OUTPUT_DIR/${APP_NAME}-${GOOS}-${GOARCH}${EXT}"
@@ -26,7 +26,7 @@ echo "🔧 Building $APP_NAME for $GOOS/$GOARCH..."
 GOOS=$GOOS GOARCH=$GOARCH go build -ldflags="-s -w" -o "$OUTPUT_PATH" "$MAIN_PATH"
 
 if [ "$GOOS" != "windows" ]; then
-  chmod +x "$OUTPUT_PATH"
+	chmod +x "$OUTPUT_PATH"
 fi
 
 echo "✅ Build successful: $OUTPUT_PATH"
