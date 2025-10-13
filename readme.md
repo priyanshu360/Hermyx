@@ -282,7 +282,7 @@ Hermyx supports multiple caching backends. Choose one depending on your use case
 
 ## 📈 Hermyx Flow Diagram
 
-![Hermyx Flow Diagram](../Hermyx/imgs/FlowDiagram.png)
+![Hermyx Flow Diagram](imgs/FlowDiagram.png)
 
 ---
 
