@@ -3,8 +3,6 @@ package engine
 import (
 	"context"
 	"fmt"
-	"hermyx/pkg/utils/fs"
-	"hermyx/pkg/utils/regex"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -12,6 +10,9 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"hermyx/pkg/utils/fs"
+	"hermyx/pkg/utils/regex"
 
 	"github.com/valyala/fasthttp"
 )
@@ -224,7 +225,7 @@ func (engine *HermyxEngine) storePid() error {
 		return err
 	}
 
-	err = os.WriteFile(path, []byte(fmt.Sprintf("%d", engine.pid)), 0644)
+	err = os.WriteFile(path, []byte(fmt.Sprintf("%d", engine.pid)), 0o644)
 	if err != nil {
 		engine.logger.Error(fmt.Sprintf("Unable to store program id due to %v", err))
 		return err

@@ -1,0 +1,49 @@
+# Global logging options (LogConfig)
+log:
+  toFile: false # Write logs to file if true
+  filePath: "" # Path to log file when toFile=true
+  toStdout: true # Mirror logs to stdout
+  prefix: "[hermyx]" # Log line prefix
+  flags: 0 # Bit flags for log formatting (app-defined)
+  debugEnabled: false # Enable debug logs
+
+# Server settings (ServerConfig)
+server:
+  port: 8080 # TCP port for the proxy
+
+# Default cache backend (CacheConfig)
+cache:
+  type: "memory" # memory|disk|redis
+  enabled: true # Master toggle for caching
+  ttl: 300s # Default TTL for cached entries
+  capacity: 200000 # Max number of entries (approx; app-defined)
+  maxContentSize: 1048576 # Max item size in bytes
+  keyConfig: # Cache key construction (CacheKeyConfig)
+    type: ["path", "method", "query", "header"] # What parts compose the key
+    excludeMethods: ["POST", "PUT", "DELETE"] # Methods not cached
+    headers:
+      - key: "Accept" # Header names to include in key
+      - key: "Accept-Encoding"
+
+# Local storage path (for disk cache or misc data) (StorageConfig)
+storage:
+  path: "/var/cache/hermyx" # Directory used by storage-aware backends
+
+# Route list (RouteConfig[])
+routes:
+  - name: "api" # Route name
+    path: "/api" # Path prefix to match
+    target: "http://127.0.0.1:9001" # Upstream origin
+    include: [] # Optional allowlist subpaths
+    exclude: [] # Optional blocklist subpaths
+    cache: # Per-route cache overrides (CacheConfig)
+      type: "memory"
+      enabled: true
+      ttl: 120s
+      capacity: 50000
+      maxContentSize: 1048576
+      keyConfig:
+        type: ["path", "query"]
+        excludeMethods: ["POST"]
+        headers:
+          - key: "Accept"
