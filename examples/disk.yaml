@@ -14,45 +14,38 @@ server:
 storage:
   path: "/var/cache/hermyx"
 
-# Define all available cache backends here
-caches:
-  # A named 'disk' cache instance
-  # This cache will store its data in the directory defined in 'storage.path'
-  persistent-disk-cache:
-    type: "disk"
-    enabled: true
-    ttl: 3600s # 1 hour TTL, suitable for less volatile assets
-    capacity: 500000 # Max number of file entries
-    maxContentSize: 10000000 # 10 MB max item size
-    keyConfig:
-      type: ["path", "query"]
-      excludeMethods: ["POST", "PUT", "DELETE"]
-
-  # A second, in-memory cache for fast access to smaller items
-  fast-memory-cache:
-    type: "memory"
-    enabled: true
-    ttl: 120s # 2 minute TTL for frequently changing data
-    capacity: 10000
-    maxContentSize: 512000 # 512 KB max item size
-    keyConfig:
-      type: ["path"]
+cache:
+  type: "memory"
+  enabled: true
+  ttl: 60s
 
 # Route list
 routes:
   - name: "static-assets"
     path: "/assets"
     target: "http://127.0.0.1:9001"
-    # This route uses the disk cache for persistent storage of assets
-    cacheName: "persistent-disk-cache"
+    cache:
+      type: "disk"
+      enabled: true
+      ttl: 3600s # 1 hour
+      capacity: 500000
+      maxContentSize: 10000000 # 10 MB
+      keyConfig:
+        type: ["path", "query"]
+        excludeMethods: ["POST", "PUT", "DELETE"]
 
   - name: "api-data"
     path: "/api"
     target: "http://127.0.0.1:9002"
-    # This route uses the memory cache for speed
-    cacheName: "fast-memory-cache"
+    cache:
+      type: "memory"
+      enabled: true
+      ttl: 120s # 2 minutes
+      capacity: 10000
+      maxContentSize: 512000 # 512 KB
+      keyConfig:
+        type: ["path"]
 
   - name: "realtime-feed"
     path: "/feed"
     target: "http://127.0.0.1:9003"
-    # This route is not cached
