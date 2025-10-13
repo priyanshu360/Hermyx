@@ -280,6 +280,12 @@ Hermyx supports multiple caching backends. Choose one depending on your use case
 
 ---
 
+## 📈 Hermyx Flow Diagram
+
+![Hermyx Flow Diagram](../Hermyx/imgs/FlowDiagram.png)
+
+---
+
 ## 🧾 Debugging Tips
 
 * Enable `log.toStdout: true` and set `flags: 0` for clear log output.
