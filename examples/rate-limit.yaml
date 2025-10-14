@@ -1,0 +1,122 @@
+log:
+  toFile: true
+  filePath: "./hermyx.log"
+  toStdout: true
+  prefix: "[Hermyx]"
+  flags: 0
+  debugEnabled: true
+
+server:
+  port: 8080
+
+storage:
+  path: "./.hermyx"
+
+cache:
+  enabled: true
+  type: "redis"
+  ttl: 5m
+  capacity: 1000
+  maxContentSize: 1048576
+  redis:
+    address: "redis:6379"
+    password: ""
+    db: 0
+    defaultTtl: 10s
+    namespace: "hermyx:"
+  keyConfig:
+    type: ["path", "method", "query", "header"]
+    headers:
+      - key: "X-Request-User"
+      - key: "X-Device-ID"
+    excludeMethods: ["post", "put"]
+
+# Global rate limiting - applies to all routes unless overridden
+rateLimit:
+  enabled: true
+  requests: 1000              # Max requests
+  window: 1m                  # Time window (1 minute)
+  storage: "redis"            # Storage backend: "memory" or "redis" (can be overridden per-route)
+  keyBy: ["ip"]               # Rate limit by IP address
+  # Alternative key strategies:
+  # keyBy: ["header:X-API-Key"]           # By API key
+  # keyBy: ["header:Authorization"]       # By auth token
+  # keyBy: ["ip", "header:X-User-ID"]    # Combined keys
+  blockDuration: 5m           # How long to block after limit exceeded
+  statusCode: 429             # HTTP status code to return
+  message: "Rate limit exceeded. Please try again later."
+  redis:                      # Redis configuration (required when storage="redis")
+      address: "redis:6379"
+      password: ""
+      db: 0
+      defaultTtl: 10s
+      namespace: "hermyx:"
+
+  headers:
+    includeRemaining: true    # Add X-RateLimit-Remaining header
+    includeReset: true        # Add X-RateLimit-Reset header
+    includeLimit: true        # Add X-RateLimit-Limit header
+
+routes:
+  - name: "user-api"
+    path: "^/api/users"
+    target: "localhost:3000"
+    include: [".*"]
+    exclude: ["^/api/users/private"]
+    cache:
+      enabled: true
+      ttl: 2m
+      keyConfig:
+        type: ["path", "query", "header"]
+        headers:
+          - key: "Authorization"
+        excludeMethods: ["post"]
+    # Per-route rate limiting - can override any global setting including storage
+    rateLimit:
+      enabled: true
+      requests: 100           # More restrictive limit for this route
+      window: 1m
+      keyBy: ["header:Authorization", "ip"]  # Rate limit by user + IP
+      blockDuration: 10m
+      message: "User API rate limit exceeded"
+      # storage: "memory"     # Uncomment to use in-memory for this route (overrides global Redis)
+
+  # Example: Public endpoint with stricter limits (uses global Redis storage)
+  - name: "public-api"
+    path: "^/api/public"
+    target: "localhost:3000"
+    rateLimit:
+      enabled: true
+      requests: 50            # Lower limit for public endpoints
+      window: 1m
+      keyBy: ["ip"]
+      blockDuration: 15m
+
+  # Example: High-performance internal endpoint with in-memory storage
+  - name: "metrics-api"
+    path: "^/api/metrics"
+    target: "localhost:3000"
+    rateLimit:
+      enabled: true
+      requests: 10000         # Very high limit
+      window: 1m
+      storage: "memory"       # Override: use in-memory for speed (single instance only)
+      keyBy: ["ip"]
+
+  # Example: Authenticated endpoint with higher limits
+  - name: "premium-api"
+    path: "^/api/premium"
+    target: "localhost:3000"
+    rateLimit:
+      enabled: true
+      requests: 5000          # Higher limit for premium users
+      window: 1m
+      keyBy: ["header:X-API-Key"]
+      blockDuration: 1m
+
+  # Example: No rate limiting for internal services
+  - name: "internal-api"
+    path: "^/api/internal"
+    target: "localhost:3000"
+    rateLimit:
+      enabled: false          # Disable rate limiting for this route

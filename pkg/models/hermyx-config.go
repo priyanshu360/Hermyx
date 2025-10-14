@@ -60,19 +60,40 @@ type StorageConfig struct {
 	Path string `yaml:"path"`
 }
 
+type RateLimitConfig struct {
+	Enabled       bool                    `yaml:"enabled"`
+	Requests      int64                   `yaml:"requests"`      // Max requests in the window
+	Window        time.Duration           `yaml:"window"`        // Time window (e.g., 1m, 1h)
+	Storage       string                  `yaml:"storage"`       // "memory" or "redis"
+	KeyBy         []string                `yaml:"keyBy"`         // Rate limit key strategy (e.g., ["ip"], ["header:X-API-Key"])
+	BlockDuration time.Duration           `yaml:"blockDuration"` // How long to block after limit exceeded
+	StatusCode    int                     `yaml:"statusCode"`    // HTTP status code to return (default 429)
+	Message       string                  `yaml:"message"`       // Custom error message
+	Redis         *RedisConfig            `yaml:"redis"`         // Redis config for distributed rate limiting
+	Headers       *RateLimitHeadersConfig `yaml:"headers"`       // Header configuration
+}
+
+type RateLimitHeadersConfig struct {
+	IncludeRemaining bool `yaml:"includeRemaining"` // Include X-RateLimit-Remaining
+	IncludeReset     bool `yaml:"includeReset"`     // Include X-RateLimit-Reset
+	IncludeLimit     bool `yaml:"includeLimit"`     // Include X-RateLimit-Limit
+}
+
 type RouteConfig struct {
-	Name    string       `yaml:"name"`
-	Path    string       `yaml:"path"`
-	Target  string       `yaml:"target"`
-	Include []string     `yaml:"include"`
-	Exclude []string     `yaml:"exclude"`
-	Cache   *CacheConfig `yaml:"cache"`
+	Name      string           `yaml:"name"`
+	Path      string           `yaml:"path"`
+	Target    string           `yaml:"target"`
+	Include   []string         `yaml:"include"`
+	Exclude   []string         `yaml:"exclude"`
+	Cache     *CacheConfig     `yaml:"cache"`
+	RateLimit *RateLimitConfig `yaml:"rateLimit"`
 }
 
 type HermyxConfig struct {
-	Log     *LogConfig     `yaml:"log"`
-	Server  *ServerConfig  `yaml:"server"`
-	Cache   *CacheConfig   `yaml:"cache"`
-	Storage *StorageConfig `yaml:"storage"`
-	Routes  []RouteConfig  `yaml:"routes"`
+	Log       *LogConfig       `yaml:"log"`
+	Server    *ServerConfig    `yaml:"server"`
+	Cache     *CacheConfig     `yaml:"cache"`
+	Storage   *StorageConfig   `yaml:"storage"`
+	RateLimit *RateLimitConfig `yaml:"rateLimit"`
+	Routes    []RouteConfig    `yaml:"routes"`
 }

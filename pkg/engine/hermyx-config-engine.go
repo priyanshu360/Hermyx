@@ -5,6 +5,7 @@ import (
 	"hermyx/pkg/cache"
 	"hermyx/pkg/cachemanager"
 	"hermyx/pkg/models"
+	"hermyx/pkg/ratelimit"
 	"hermyx/pkg/utils/fs"
 	"hermyx/pkg/utils/hash"
 	"hermyx/pkg/utils/logger"
@@ -24,16 +25,18 @@ type compiledRoute struct {
 	PathPattern  *regexp.Regexp
 	IncludeRegex *regexp.Regexp
 	ExcludeRegex *regexp.Regexp
+	RateLimiter  *ratelimit.RateLimiter
 }
 
 type HermyxEngine struct {
-	config         *models.HermyxConfig
-	logger         *logger.Logger
-	cacheManager   *cachemanager.CacheManager
-	compiledRoutes []compiledRoute
-	configPath     string
-	pid            uint64
-	hostClients    map[string]*fasthttp.HostClient
+	config            *models.HermyxConfig
+	logger            *logger.Logger
+	cacheManager      *cachemanager.CacheManager
+	globalRateLimiter *ratelimit.RateLimiter
+	compiledRoutes    []compiledRoute
+	configPath        string
+	pid               uint64
+	hostClients       map[string]*fasthttp.HostClient
 }
 
 func InstantiateHermyxEngine(configPath string) *HermyxEngine {
@@ -99,7 +102,7 @@ func InstantiateHermyxEngine(configPath string) *HermyxEngine {
 		storageDir := filepath.Join(programDataDir, hash.HashString(absConfigPath))
 		logger_.Info(fmt.Sprintf("Assigning storage path as %s", storageDir))
 
-		config.Storage = &models.StorageConfig{storageDir}
+		config.Storage = &models.StorageConfig{Path: storageDir}
 	}
 	if config.Routes == nil {
 		config.Routes = []models.RouteConfig{}
@@ -135,13 +138,26 @@ func InstantiateHermyxEngine(configPath string) *HermyxEngine {
 
 	cacheManager := cachemanager.NewCacheManager(cache_)
 
+	// Initialize global rate limiter
+	var globalRateLimiter *ratelimit.RateLimiter
+	if config.RateLimit != nil && config.RateLimit.Enabled {
+		var err error
+		globalRateLimiter, err = ratelimit.NewRateLimiter(config.RateLimit)
+		if err != nil {
+			logger_.Warn(fmt.Sprintf("Failed to initialize global rate limiter: %v", err))
+		} else {
+			logger_.Info("Global rate limiter initialized")
+		}
+	}
+
 	engine := &HermyxEngine{
-		config:       &config,
-		logger:       logger_,
-		cacheManager: cacheManager,
-		configPath:   configPath,
-		pid:          uint64(os.Getpid()),
-		hostClients:  make(map[string]*fasthttp.HostClient),
+		config:            &config,
+		logger:            logger_,
+		cacheManager:      cacheManager,
+		globalRateLimiter: globalRateLimiter,
+		configPath:        configPath,
+		pid:               uint64(os.Getpid()),
+		hostClients:       make(map[string]*fasthttp.HostClient),
 	}
 
 	engine.compileRoutes()

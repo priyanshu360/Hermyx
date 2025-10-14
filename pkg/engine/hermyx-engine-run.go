@@ -3,6 +3,8 @@ package engine
 import (
 	"context"
 	"fmt"
+	"hermyx/pkg/models"
+	"hermyx/pkg/ratelimit"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -35,6 +37,19 @@ func (engine *HermyxEngine) compileRoutes() {
 		}
 
 		route.Cache = engine.cacheManager.Resolve(engine.config.Cache, route.Cache)
+		
+		// Initialize per-route rate limiter
+		resolvedRateLimitConfig := ratelimit.Resolve(engine.config.RateLimit, route.RateLimit)
+		if resolvedRateLimitConfig != nil && resolvedRateLimitConfig.Enabled {
+			rateLimiter, err := ratelimit.NewRateLimiter(resolvedRateLimitConfig)
+			if err != nil {
+				engine.logger.Warn(fmt.Sprintf("Failed to initialize rate limiter for route %s: %v", route.Name, err))
+			} else {
+				cr.RateLimiter = rateLimiter
+				engine.logger.Info(fmt.Sprintf("Rate limiter initialized for route %s", route.Name))
+			}
+		}
+		
 		engine.compiledRoutes = append(engine.compiledRoutes, cr)
 	}
 }
@@ -91,12 +106,39 @@ func (engine *HermyxEngine) handleRequest(ctx *fasthttp.RequestCtx) {
 
 	cr, matched := engine.matchRoute(path, method)
 	if !matched {
+		// Check global rate limit for unmatched routes
+		if engine.globalRateLimiter != nil {
+			result := engine.globalRateLimiter.Check(ctx)
+			if !result.Allowed {
+				engine.handleRateLimitExceeded(ctx, result, engine.config.RateLimit)
+				return
+			}
+			ratelimit.SetRateLimitHeaders(ctx, result, engine.config.RateLimit)
+		}
+
 		engine.logger.Info(fmt.Sprintf("No route matched for %s %s; proxying raw", method, path))
 		if err := engine.fallbackProxy(ctx); err != nil {
 			engine.logger.Error("Fallback proxy error: " + err.Error())
 			ctx.Error("Fallback proxy error: "+err.Error(), fasthttp.StatusBadGateway)
 		}
 		return
+	}
+
+	// Check rate limit (per-route takes precedence over global)
+	rateLimiter := cr.RateLimiter
+	rateLimitConfig := ratelimit.Resolve(engine.config.RateLimit, cr.Route.RateLimit)
+	
+	if rateLimiter == nil && engine.globalRateLimiter != nil {
+		rateLimiter = engine.globalRateLimiter
+	}
+
+	if rateLimiter != nil {
+		result := rateLimiter.Check(ctx)
+		if !result.Allowed {
+			engine.handleRateLimitExceeded(ctx, result, rateLimitConfig)
+			return
+		}
+		ratelimit.SetRateLimitHeaders(ctx, result, rateLimitConfig)
 	}
 
 	if cr.Route.Cache.KeyConfig == nil {
@@ -121,6 +163,28 @@ func (engine *HermyxEngine) handleRequest(ctx *fasthttp.RequestCtx) {
 	}
 
 	engine.cacheResponse(cr, key, ctx)
+}
+
+func (engine *HermyxEngine) handleRateLimitExceeded(ctx *fasthttp.RequestCtx, result *ratelimit.RateLimitResult, config *models.RateLimitConfig) {
+	statusCode := fasthttp.StatusTooManyRequests
+	message := "Rate limit exceeded. Please try again later."
+	
+	if config != nil {
+		if config.StatusCode > 0 {
+			statusCode = config.StatusCode
+		}
+		if config.Message != "" {
+			message = config.Message
+		}
+	}
+
+	engine.logger.Warn(fmt.Sprintf("Rate limit exceeded for key: %s", result.Key))
+	
+	ratelimit.SetRateLimitHeaders(ctx, result, config)
+	ctx.Response.Header.Set("Retry-After", fmt.Sprintf("%d", int(result.ResetTime.Sub(time.Now()).Seconds())))
+	
+	ctx.SetStatusCode(statusCode)
+	ctx.SetBodyString(message)
 }
 
 func (engine *HermyxEngine) matchRoute(path, method string) (*compiledRoute, bool) {
@@ -238,9 +302,27 @@ func (engine *HermyxEngine) storePid() error {
 func (engine *HermyxEngine) cleanup() error {
 	var err error = nil
 
+	// Close global rate limiter
+	if engine.globalRateLimiter != nil {
+		if closeErr := engine.globalRateLimiter.Close(); closeErr != nil {
+			engine.logger.Error(fmt.Sprintf("Failed to close global rate limiter: %v", closeErr))
+		}
+		engine.logger.Info("Global rate limiter closed")
+	}
+
+	// Close per-route rate limiters
+	for i := range engine.compiledRoutes {
+		if engine.compiledRoutes[i].RateLimiter != nil {
+			if closeErr := engine.compiledRoutes[i].RateLimiter.Close(); closeErr != nil {
+				engine.logger.Error(fmt.Sprintf("Failed to close rate limiter for route %s: %v", 
+					engine.compiledRoutes[i].Route.Name, closeErr))
+			}
+		}
+	}
+
 	err = engine.cacheManager.Close()
 	if err != nil {
-		engine.logger.Error(fmt.Sprintf("Failed to close the cache due to: %w", err))
+		engine.logger.Error(fmt.Sprintf("Failed to close the cache due to: %v", err))
 	}
 	engine.logger.Info("Cache closed")
 
