@@ -15,7 +15,7 @@ storage:
   path: "/var/cache/hermyx"
 
 cache:
-  type: "memory"
+  type: "disk"
   enabled: true
   ttl: 60s
 
