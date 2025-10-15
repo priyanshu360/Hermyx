@@ -38,7 +38,7 @@ routes:
     path: "/api"
     target: "http://127.0.0.1:9002"
     cache:
-      type: "memory"
+      type: "disk"
       enabled: true
       ttl: 120s # 2 minutes
       capacity: 10000
