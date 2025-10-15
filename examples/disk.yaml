@@ -1,0 +1,51 @@
+# Global logging options
+log:
+  toFile: false
+  filePath: "/var/log/hermyx.log"
+  toStdout: true
+  prefix: "[hermyx]"
+  debugEnabled: false
+
+# Server settings
+server:
+  port: 8080
+
+# Local storage path is crucial for the disk cache
+storage:
+  path: "/var/cache/hermyx"
+
+cache:
+  type: "disk"
+  enabled: true
+  ttl: 60s
+
+# Route list
+routes:
+  - name: "static-assets"
+    path: "/assets"
+    target: "http://127.0.0.1:9001"
+    cache:
+      type: "disk"
+      enabled: true
+      ttl: 3600s # 1 hour
+      capacity: 500000
+      maxContentSize: 10000000 # 10 MB
+      keyConfig:
+        type: ["path", "query"]
+        excludeMethods: ["POST", "PUT", "DELETE"]
+
+  - name: "api-data"
+    path: "/api"
+    target: "http://127.0.0.1:9002"
+    cache:
+      type: "disk"
+      enabled: true
+      ttl: 120s # 2 minutes
+      capacity: 10000
+      maxContentSize: 512000 # 512 KB
+      keyConfig:
+        type: ["path"]
+
+  - name: "realtime-feed"
+    path: "/feed"
+    target: "http://127.0.0.1:9003"
