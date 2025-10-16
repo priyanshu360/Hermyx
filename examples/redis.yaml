@@ -18,11 +18,12 @@ cache:
   ttl: 300s # Default TTL for cached entries
   capacity: 0 # Not applicable to Redis
   maxContentSize: 1048576 # Max item size in bytes
-  redisConfig:
-    host: "127.0.0.1" # Redis server address
-    port: 6379 # Redis server port
-    db: 0 # Database index
-    password: "" # Optional password for Redis connection
+  redis:
+    address: "127.0.0.1:6379"  # Redis server address with port
+    password: ""               # Optional password
+    db: 0                      # Database index
+    namespace: "hermyx:"       # Optional key namespace/prefix
+
   keyConfig:
     type: ["path", "query"]
     excludeMethods: ["POST", "PUT", "DELETE"]
