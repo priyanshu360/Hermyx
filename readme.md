@@ -187,7 +187,7 @@ routes:
 
 ## 🔧 Logging Configuration Example
 
-Hermyx supports flexible logging via the `log` section in the YAML config file. Below is an example of configuration and explanation of each field:
+Hermyx supports flexible logging via the `log` section in the YAML config file. Below is an example configuration and an explanation of each field:
 
 ```yaml
 log:
