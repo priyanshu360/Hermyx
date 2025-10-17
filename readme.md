@@ -185,6 +185,21 @@ routes:
 
 ---
 
+## 🔧 Logging Configuration Example
+
+Hermyx supports flexible logging via the `log` section in the YAML config file. Below is an example configuration and an explanation of each field:
+
+```yaml
+log:
+  toFile: true                 # write logs to a file when true
+  filePath: "./hermyx.log"     # path to log file
+  toStdout: true                # whether to also write logs to stdout
+  prefix: "[Hermyx] "          # prefix included at start of each log line
+  flags: 0                      # Go log flags: combination of log.Ldate, log.Ltime, log.Lshortfile, etc.
+  debugEnabled: true           # when true, extra debug logs will be emitted
+
+
+
 ## 💡 Cache Types
 
 Hermyx supports multiple caching backends. Choose one depending on your use case:
