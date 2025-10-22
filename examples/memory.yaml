@@ -27,7 +27,7 @@ cache:
 
 # Local storage path (for disk cache or misc data) (StorageConfig)
 storage:
-  path: "/var/cache/hermyx" # Directory used by storage-aware backends
+  path: "/tmp/hermyx" # Directory used by storage-aware backends
 
 # Route list (RouteConfig[])
 routes:

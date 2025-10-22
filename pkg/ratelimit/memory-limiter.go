@@ -1,6 +1,7 @@
 package ratelimit
 
 import (
+	"fmt"
 	"sync"
 	"time"
 )
@@ -9,7 +10,7 @@ import (
 type TokenBucket struct {
 	tokens         int64
 	maxTokens      int64
-	refillRate     int64         // tokens per second
+	refillRate     int64 // tokens per second
 	lastRefillTime time.Time
 	mu             sync.Mutex
 }
@@ -41,15 +42,28 @@ func NewMemoryRateLimiter(maxRequests int64, window time.Duration) *MemoryRateLi
 // Allow checks if a request should be allowed for the given key
 // Returns: allowed (bool), remaining (int64), resetTime (time.Time)
 func (m *MemoryRateLimiter) Allow(key string) (bool, int64, time.Time) {
+	return m.AllowWithLimit(key, m.maxTokens, m.window)
+}
+
+// AllowWithLimit checks if a request should be allowed for the given key with a specific limit and window
+// Returns: allowed (bool), remaining (int64), resetTime (time.Time)
+func (m *MemoryRateLimiter) AllowWithLimit(key string, limit int64, window time.Duration) (bool, int64, time.Time) {
 	m.mu.Lock()
 	bucket, exists := m.buckets[key]
+	fmt.Println("MemoryRateLimiter: Checking key =", key, "Exists =", exists)
 	if !exists {
-		bucket = m.createBucket()
+		bucket = m.createBucketWithLimit(limit, window)
 		m.buckets[key] = bucket
 	}
 	m.mu.Unlock()
 
-	return bucket.consume()
+	fmt.Printf("MemoryRateLimiter: AllowWithLimit key=%s, limit=%d, window=%s\n", key, limit, window.String())
+	refillRate := int64(float64(limit) / window.Seconds())
+	if refillRate < 1 {
+		refillRate = 1
+	}
+	fmt.Println("MemoryRateLimiter: Refill rate =", refillRate, "tokens/second")
+	return bucket.consumeWithLimit(limit, refillRate)
 }
 
 // createBucket creates a new token bucket
@@ -67,20 +81,47 @@ func (m *MemoryRateLimiter) createBucket() *TokenBucket {
 	}
 }
 
+// createBucketWithLimit creates a new token bucket with specific limit and window
+func (m *MemoryRateLimiter) createBucketWithLimit(limit int64, window time.Duration) *TokenBucket {
+	refillRate := int64(float64(limit) / window.Seconds())
+	if refillRate < 1 {
+		refillRate = 1
+	}
+
+	return &TokenBucket{
+		tokens:         limit,
+		maxTokens:      limit,
+		refillRate:     refillRate,
+		lastRefillTime: time.Now(),
+	}
+}
+
 // consume attempts to consume a token from the bucket
 func (tb *TokenBucket) consume() (bool, int64, time.Time) {
+	return tb.consumeWithLimit(tb.maxTokens, tb.refillRate)
+}
+
+// consumeWithLimit attempts to consume a token from the bucket with specific limit and refill rate
+func (tb *TokenBucket) consumeWithLimit(limit int64, refillRate int64) (bool, int64, time.Time) {
 	tb.mu.Lock()
 	defer tb.mu.Unlock()
+
+	// If limit is 0, immediately block the request
+	if limit <= 0 {
+		now := time.Now()
+		resetTime := tb.calculateResetTimeWithLimit(now, limit, refillRate)
+		return false, 0, resetTime
+	}
 
 	now := time.Now()
 	elapsed := now.Sub(tb.lastRefillTime)
 
 	// Refill tokens based on elapsed time
-	tokensToAdd := int64(elapsed.Seconds()) * tb.refillRate
+	tokensToAdd := int64(elapsed.Seconds()) * refillRate
 	if tokensToAdd > 0 {
 		tb.tokens += tokensToAdd
-		if tb.tokens > tb.maxTokens {
-			tb.tokens = tb.maxTokens
+		if tb.tokens > limit {
+			tb.tokens = limit
 		}
 		tb.lastRefillTime = now
 	}
@@ -88,23 +129,23 @@ func (tb *TokenBucket) consume() (bool, int64, time.Time) {
 	// Try to consume a token
 	if tb.tokens > 0 {
 		tb.tokens--
-		resetTime := tb.calculateResetTime(now)
+		resetTime := tb.calculateResetTimeWithLimit(now, limit, refillRate)
 		return true, tb.tokens, resetTime
 	}
 
 	// Not enough tokens
-	resetTime := tb.calculateResetTime(now)
+	resetTime := tb.calculateResetTimeWithLimit(now, limit, refillRate)
 	return false, 0, resetTime
 }
 
-// calculateResetTime calculates when the bucket will be fully refilled
-func (tb *TokenBucket) calculateResetTime(now time.Time) time.Time {
-	if tb.tokens >= tb.maxTokens {
+// calculateResetTimeWithLimit calculates when the bucket will be fully refilled with specific limit and refill rate
+func (tb *TokenBucket) calculateResetTimeWithLimit(now time.Time, limit int64, refillRate int64) time.Time {
+	if tb.tokens >= limit {
 		return now
 	}
 
-	tokensNeeded := tb.maxTokens - tb.tokens
-	secondsNeeded := float64(tokensNeeded) / float64(tb.refillRate)
+	tokensNeeded := limit - tb.tokens
+	secondsNeeded := float64(tokensNeeded) / float64(refillRate)
 	return now.Add(time.Duration(secondsNeeded * float64(time.Second)))
 }
 
@@ -136,6 +177,12 @@ func (m *MemoryRateLimiter) Reset(key string) {
 	delete(m.buckets, key)
 }
 
+// Health checks if the memory rate limiter is healthy
+func (m *MemoryRateLimiter) Health() error {
+	// Memory rate limiter is always healthy as it doesn't depend on external services
+	return nil
+}
+
 // Close cleans up resources
 func (m *MemoryRateLimiter) Close() error {
 	m.mu.Lock()
@@ -143,4 +190,3 @@ func (m *MemoryRateLimiter) Close() error {
 	m.buckets = make(map[string]*TokenBucket)
 	return nil
 }
-

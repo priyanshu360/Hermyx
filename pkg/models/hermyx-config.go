@@ -40,6 +40,7 @@ type RedisConfig struct {
 	DB           *int          `yaml:"db"`
 	DefaultTTL   time.Duration `yaml:"defaultTtl"`
 	KeyNamespace string        `yaml:"namespace"`
+	FailOpen     *bool         `yaml:"failOpen"` // If true, allow requests when Redis is down; if false, block them
 }
 
 type CacheConfig struct {
@@ -62,21 +63,21 @@ type StorageConfig struct {
 
 type RateLimitConfig struct {
 	Enabled       bool                    `yaml:"enabled"`
-	Requests      int64                   `yaml:"requests"`      // Max requests in the window
-	Window        time.Duration           `yaml:"window"`        // Time window (e.g., 1m, 1h)
-	Storage       string                  `yaml:"storage"`       // "memory" or "redis"
-	KeyBy         []string                `yaml:"keyBy"`         // Rate limit key strategy (e.g., ["ip"], ["header:X-API-Key"])
-	BlockDuration time.Duration           `yaml:"blockDuration"` // How long to block after limit exceeded
-	StatusCode    int                     `yaml:"statusCode"`    // HTTP status code to return (default 429)
-	Message       string                  `yaml:"message"`       // Custom error message
-	Redis         *RedisConfig            `yaml:"redis"`         // Redis config for distributed rate limiting
-	Headers       *RateLimitHeadersConfig `yaml:"headers"`       // Header configuration
+	Requests      int64                   `yaml:"requests"`
+	Window        time.Duration           `yaml:"window"`
+	Storage       string                  `yaml:"storage"`
+	KeyBy         []string                `yaml:"keyBy"`
+	BlockDuration time.Duration           `yaml:"blockDuration"`
+	StatusCode    int                     `yaml:"statusCode"`
+	Message       string                  `yaml:"message"`
+	Redis         *RedisConfig            `yaml:"redis"`
+	Headers       *RateLimitHeadersConfig `yaml:"headers"`
 }
 
 type RateLimitHeadersConfig struct {
-	IncludeRemaining bool `yaml:"includeRemaining"` // Include X-RateLimit-Remaining
-	IncludeReset     bool `yaml:"includeReset"`     // Include X-RateLimit-Reset
-	IncludeLimit     bool `yaml:"includeLimit"`     // Include X-RateLimit-Limit
+	IncludeRemaining bool `yaml:"includeRemaining"`
+	IncludeReset     bool `yaml:"includeReset"`
+	IncludeLimit     bool `yaml:"includeLimit"`
 }
 
 type RouteConfig struct {

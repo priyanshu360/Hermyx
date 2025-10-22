@@ -6,6 +6,7 @@ import (
 	"hermyx/pkg/cachemanager"
 	"hermyx/pkg/models"
 	"hermyx/pkg/ratelimit"
+	"hermyx/pkg/ratelimitmanager"
 	"hermyx/pkg/utils/fs"
 	"hermyx/pkg/utils/hash"
 	"hermyx/pkg/utils/logger"
@@ -25,18 +26,17 @@ type compiledRoute struct {
 	PathPattern  *regexp.Regexp
 	IncludeRegex *regexp.Regexp
 	ExcludeRegex *regexp.Regexp
-	RateLimiter  *ratelimit.RateLimiter
 }
 
 type HermyxEngine struct {
-	config            *models.HermyxConfig
-	logger            *logger.Logger
-	cacheManager      *cachemanager.CacheManager
-	globalRateLimiter *ratelimit.RateLimiter
-	compiledRoutes    []compiledRoute
-	configPath        string
-	pid               uint64
-	hostClients       map[string]*fasthttp.HostClient
+	config           *models.HermyxConfig
+	logger           *logger.Logger
+	cacheManager     *cachemanager.CacheManager
+	rateLimitManager *ratelimitmanager.RateLimitManager
+	compiledRoutes   []compiledRoute
+	configPath       string
+	pid              uint64
+	hostClients      map[string]*fasthttp.HostClient
 }
 
 func InstantiateHermyxEngine(configPath string) *HermyxEngine {
@@ -57,6 +57,7 @@ func InstantiateHermyxEngine(configPath string) *HermyxEngine {
 		log.Fatalf("Unable to instantiate the logger: %v", err)
 	}
 
+	logger_.Debug(fmt.Sprintf("Loaded config: %+v", config))
 	// Intelligent defaults
 	if config.Server == nil || config.Server.Port == 0 {
 		logger_.Warn("Server port not specified defaulting to random port.")
@@ -138,26 +139,26 @@ func InstantiateHermyxEngine(configPath string) *HermyxEngine {
 
 	cacheManager := cachemanager.NewCacheManager(cache_)
 
-	// Initialize global rate limiter
-	var globalRateLimiter *ratelimit.RateLimiter
+	// Initialize rate limit manager (single backend like cache)
+	var rateLimitManager *ratelimitmanager.RateLimitManager
 	if config.RateLimit != nil && config.RateLimit.Enabled {
-		var err error
-		globalRateLimiter, err = ratelimit.NewRateLimiter(config.RateLimit)
+		rateLimiter, err := ratelimit.NewRateLimiter(config.RateLimit)
 		if err != nil {
-			logger_.Warn(fmt.Sprintf("Failed to initialize global rate limiter: %v", err))
+			log.Fatalf("Failed to initialize rate limiter : %v", err)
 		} else {
-			logger_.Info("Global rate limiter initialized")
+			rateLimitManager = ratelimitmanager.NewRateLimitManager(rateLimiter, logger_)
+			logger_.Info("Rate limit manager initialized")
 		}
 	}
 
 	engine := &HermyxEngine{
-		config:            &config,
-		logger:            logger_,
-		cacheManager:      cacheManager,
-		globalRateLimiter: globalRateLimiter,
-		configPath:        configPath,
-		pid:               uint64(os.Getpid()),
-		hostClients:       make(map[string]*fasthttp.HostClient),
+		config:           &config,
+		logger:           logger_,
+		cacheManager:     cacheManager,
+		rateLimitManager: rateLimitManager,
+		configPath:       configPath,
+		pid:              uint64(os.Getpid()),
+		hostClients:      make(map[string]*fasthttp.HostClient),
 	}
 
 	engine.compileRoutes()

@@ -22,14 +22,10 @@ const (
 // IRateLimiter defines the interface for rate limiting implementations
 type IRateLimiter interface {
 	Allow(key string) (bool, int64, time.Time)
+	AllowWithLimit(key string, limit int64, window time.Duration) (bool, int64, time.Time)
 	Reset(key string)
+	Health() error
 	Close() error
-}
-
-// RateLimiter manages rate limiting for requests
-type RateLimiter struct {
-	limiter IRateLimiter
-	config  *models.RateLimitConfig
 }
 
 // RateLimitResult contains the result of a rate limit check
@@ -41,20 +37,14 @@ type RateLimitResult struct {
 	Key       string
 }
 
-// NewRateLimiter creates a new rate limiter based on configuration
-func NewRateLimiter(config *models.RateLimitConfig) (*RateLimiter, error) {
+// NewRateLimiterBackend creates a new rate limiter backend based on global configuration
+func NewRateLimiter(config *models.RateLimitConfig) (IRateLimiter, error) {
 	if config == nil || !config.Enabled {
 		return nil, nil
 	}
 
-	// Set defaults
-	if config.StatusCode == 0 {
-		config.StatusCode = fasthttp.StatusTooManyRequests
-	}
-	if config.Message == "" {
-		config.Message = "Rate limit exceeded. Please try again later."
-	}
-	if config.Requests <= 0 {
+	// Set defaults only for negative values (invalid)
+	if config.Requests < 0 {
 		config.Requests = 100
 	}
 	if config.Window <= 0 {
@@ -65,7 +55,6 @@ func NewRateLimiter(config *models.RateLimitConfig) (*RateLimiter, error) {
 	}
 
 	var limiter IRateLimiter
-	var err error
 
 	switch strings.ToLower(config.Storage) {
 	case STORAGE_MEMORY:
@@ -79,45 +68,18 @@ func NewRateLimiter(config *models.RateLimitConfig) (*RateLimiter, error) {
 		return nil, fmt.Errorf("unsupported rate limit storage type: %s", config.Storage)
 	}
 
-	return &RateLimiter{
-		limiter: limiter,
-		config:  config,
-	}, err
+	return limiter, nil
 }
 
-// Check checks if a request should be allowed
-func (rl *RateLimiter) Check(ctx *fasthttp.RequestCtx) *RateLimitResult {
-	if rl == nil || rl.limiter == nil {
-		// Rate limiting is disabled
-		return &RateLimitResult{
-			Allowed:   true,
-			Remaining: -1,
-			ResetTime: time.Time{},
-			Limit:     -1,
-		}
-	}
-
-	key := rl.buildKey(ctx)
-	allowed, remaining, resetTime := rl.limiter.Allow(key)
-
-	return &RateLimitResult{
-		Allowed:   allowed,
-		Remaining: remaining,
-		ResetTime: resetTime,
-		Limit:     rl.config.Requests,
-		Key:       key,
-	}
-}
-
-// buildKey builds a rate limit key based on the configuration
-func (rl *RateLimiter) buildKey(ctx *fasthttp.RequestCtx) string {
-	if len(rl.config.KeyBy) == 0 {
+// BuildKey builds a rate limit key based on the configuration
+func BuildKey(ctx *fasthttp.RequestCtx, config *models.RateLimitConfig) string {
+	if config == nil || len(config.KeyBy) == 0 {
 		// Default to IP
 		return getClientIP(ctx)
 	}
 
 	var parts []string
-	for _, keyType := range rl.config.KeyBy {
+	for _, keyType := range config.KeyBy {
 		if keyType == KEY_TYPE_IP {
 			parts = append(parts, getClientIP(ctx))
 		} else if strings.HasPrefix(keyType, KEY_TYPE_HEADER+":") {
@@ -125,6 +87,9 @@ func (rl *RateLimiter) buildKey(ctx *fasthttp.RequestCtx) string {
 			headerValue := string(ctx.Request.Header.Peek(headerName))
 			if headerValue != "" {
 				parts = append(parts, headerValue)
+			} else {
+				// If required header is missing, return empty string
+				return ""
 			}
 		} else {
 			// Unknown key type, use as-is
@@ -160,22 +125,8 @@ func getClientIP(ctx *fasthttp.RequestCtx) string {
 	return ctx.RemoteIP().String()
 }
 
-// Reset resets the rate limit for a specific key
-func (rl *RateLimiter) Reset(key string) {
-	if rl != nil && rl.limiter != nil {
-		rl.limiter.Reset(key)
-	}
-}
-
-// Close cleans up resources
-func (rl *RateLimiter) Close() error {
-	if rl != nil && rl.limiter != nil {
-		return rl.limiter.Close()
-	}
-	return nil
-}
-
 // Resolve merges route-specific rate limit config with global config
+// IMPORTANT: Storage and Redis are ALWAYS inherited from global config and cannot be overridden per route
 func Resolve(globalConfig *models.RateLimitConfig, routeConfig *models.RateLimitConfig) *models.RateLimitConfig {
 	if routeConfig == nil {
 		return globalConfig
@@ -189,13 +140,14 @@ func Resolve(globalConfig *models.RateLimitConfig, routeConfig *models.RateLimit
 		Enabled:       routeConfig.Enabled,
 		Requests:      routeConfig.Requests,
 		Window:        routeConfig.Window,
-		Storage:       routeConfig.Storage,
 		KeyBy:         routeConfig.KeyBy,
 		BlockDuration: routeConfig.BlockDuration,
 		StatusCode:    routeConfig.StatusCode,
 		Message:       routeConfig.Message,
-		Redis:         routeConfig.Redis,
 		Headers:       routeConfig.Headers,
+		// Storage and Redis are ALWAYS inherited from global config
+		Storage: "",
+		Redis:   nil,
 	}
 
 	// Inherit from global config if not specified
@@ -204,9 +156,6 @@ func Resolve(globalConfig *models.RateLimitConfig, routeConfig *models.RateLimit
 	}
 	if config.Window == 0 && globalConfig != nil {
 		config.Window = globalConfig.Window
-	}
-	if config.Storage == "" && globalConfig != nil {
-		config.Storage = globalConfig.Storage
 	}
 	if len(config.KeyBy) == 0 && globalConfig != nil {
 		config.KeyBy = globalConfig.KeyBy
@@ -220,33 +169,15 @@ func Resolve(globalConfig *models.RateLimitConfig, routeConfig *models.RateLimit
 	if config.Message == "" && globalConfig != nil {
 		config.Message = globalConfig.Message
 	}
-	if config.Redis == nil && globalConfig != nil {
-		config.Redis = globalConfig.Redis
-	}
 	if config.Headers == nil && globalConfig != nil {
 		config.Headers = globalConfig.Headers
 	}
 
+	// ALWAYS inherit storage and redis from global config (cannot be overridden)
+	if globalConfig != nil {
+		config.Storage = globalConfig.Storage
+		config.Redis = globalConfig.Redis
+	}
+
 	return config
-}
-
-// SetRateLimitHeaders sets the rate limit headers on the response
-func SetRateLimitHeaders(ctx *fasthttp.RequestCtx, result *RateLimitResult, config *models.RateLimitConfig) {
-	if config == nil || config.Headers == nil {
-		// Set default headers
-		ctx.Response.Header.Set("X-RateLimit-Limit", fmt.Sprintf("%d", result.Limit))
-		ctx.Response.Header.Set("X-RateLimit-Remaining", fmt.Sprintf("%d", result.Remaining))
-		ctx.Response.Header.Set("X-RateLimit-Reset", fmt.Sprintf("%d", result.ResetTime.Unix()))
-		return
-	}
-
-	if config.Headers.IncludeLimit {
-		ctx.Response.Header.Set("X-RateLimit-Limit", fmt.Sprintf("%d", result.Limit))
-	}
-	if config.Headers.IncludeRemaining {
-		ctx.Response.Header.Set("X-RateLimit-Remaining", fmt.Sprintf("%d", result.Remaining))
-	}
-	if config.Headers.IncludeReset {
-		ctx.Response.Header.Set("X-RateLimit-Reset", fmt.Sprintf("%d", result.ResetTime.Unix()))
-	}
 }

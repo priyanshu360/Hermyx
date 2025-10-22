@@ -11,12 +11,17 @@ import (
 )
 
 // RedisRateLimiter implements distributed rate limiting using Redis
+// It includes configurable fail-open/fail-closed behavior
+// When Redis is unavailable:
+// - failOpen=true (default): Allow requests to proceed (better availability)
+// - failOpen=false: Block all requests (better security)
 type RedisRateLimiter struct {
-	client     *redis.Client
-	namespace  string
-	maxTokens  int64
-	window     time.Duration
-	ctx        context.Context
+	client    *redis.Client
+	namespace string
+	maxTokens int64
+	window    time.Duration
+	ctx       context.Context
+	failOpen  bool // If true, allow requests when Redis is down; if false, block them
 }
 
 // NewRedisRateLimiter creates a new Redis-based rate limiter
@@ -34,20 +39,39 @@ func NewRedisRateLimiter(config *models.RedisConfig, maxRequests int64, window t
 		namespace += ":"
 	}
 
+	// Default to fail open for better availability
+	failOpen := true
+	if config.FailOpen != nil {
+		failOpen = *config.FailOpen
+	}
+
 	return &RedisRateLimiter{
-		client:     client,
-		namespace:  namespace,
-		maxTokens:  maxRequests,
-		window:     window,
-		ctx:        context.Background(),
+		client:    client,
+		namespace: namespace,
+		maxTokens: maxRequests,
+		window:    window,
+		ctx:       context.Background(),
+		failOpen:  failOpen,
 	}
 }
 
 // Allow checks if a request should be allowed for the given key using token bucket algorithm
 // Returns: allowed (bool), remaining (int64), resetTime (time.Time)
 func (r *RedisRateLimiter) Allow(key string) (bool, int64, time.Time) {
-	fullKey := r.key(key)
+	return r.AllowWithLimit(key, r.maxTokens, r.window)
+}
+
+// AllowWithLimit checks if a request should be allowed for the given key with specific limit and window
+// Returns: allowed (bool), remaining (int64), resetTime (time.Time)
+func (r *RedisRateLimiter) AllowWithLimit(key string, limit int64, window time.Duration) (bool, int64, time.Time) {
 	now := time.Now()
+
+	// If limit is 0, immediately block the request
+	if limit <= 0 {
+		return false, 0, now.Add(window)
+	}
+
+	fullKey := r.key(key)
 	nowUnix := now.Unix()
 
 	// Lua script for atomic token bucket implementation
@@ -94,27 +118,39 @@ func (r *RedisRateLimiter) Allow(key string) (bool, int64, time.Time) {
 		return {allowed, tokens, now + seconds_to_reset}
 	`
 
-	refillRate := float64(r.maxTokens) / r.window.Seconds()
+	refillRate := float64(limit) / window.Seconds()
 	if refillRate < 0.01 {
 		refillRate = 0.01
 	}
 
-	result, err := r.client.Eval(r.ctx, script, []string{fullKey},
-		r.maxTokens,
+	// Use a timeout context for the Redis operation
+	ctx, cancel := context.WithTimeout(r.ctx, 500*time.Millisecond)
+	defer cancel()
+
+	result, err := r.client.Eval(ctx, script, []string{fullKey},
+		limit,
 		refillRate,
 		nowUnix,
-		int64(r.window.Seconds()),
+		int64(window.Seconds()),
 	).Result()
 
 	if err != nil {
-		// On error, allow the request (fail open)
-		return true, r.maxTokens, now.Add(r.window)
+		// Redis operation failed, decide based on failOpen setting
+		if r.failOpen {
+			// Fail open: allow the request
+			return true, limit, now.Add(window)
+		}
+		// Fail closed: block the request
+		return false, 0, now.Add(window)
 	}
 
 	values, ok := result.([]interface{})
 	if !ok || len(values) < 3 {
-		// Invalid response, allow the request
-		return true, r.maxTokens, now.Add(r.window)
+		// Invalid response, decide based on failOpen setting
+		if r.failOpen {
+			return true, limit, now.Add(window)
+		}
+		return false, 0, now.Add(window)
 	}
 
 	allowed := values[0].(int64) == 1
@@ -128,12 +164,13 @@ func (r *RedisRateLimiter) Allow(key string) (bool, int64, time.Time) {
 // AllowN checks if N requests should be allowed for the given key
 // This is useful for bulk operations
 func (r *RedisRateLimiter) AllowN(key string, n int64) (bool, int64, time.Time) {
+	now := time.Now()
+
 	if n <= 0 {
-		return true, r.maxTokens, time.Now()
+		return true, r.maxTokens, now
 	}
 
 	fullKey := r.key(key)
-	now := time.Now()
 	nowUnix := now.Unix()
 
 	script := `
@@ -184,7 +221,11 @@ func (r *RedisRateLimiter) AllowN(key string, n int64) (bool, int64, time.Time) 
 		refillRate = 0.01
 	}
 
-	result, err := r.client.Eval(r.ctx, script, []string{fullKey},
+	// Use a timeout context for the Redis operation
+	ctx, cancel := context.WithTimeout(r.ctx, 500*time.Millisecond)
+	defer cancel()
+
+	result, err := r.client.Eval(ctx, script, []string{fullKey},
 		r.maxTokens,
 		refillRate,
 		nowUnix,
@@ -193,12 +234,19 @@ func (r *RedisRateLimiter) AllowN(key string, n int64) (bool, int64, time.Time) 
 	).Result()
 
 	if err != nil {
-		return true, r.maxTokens, now.Add(r.window)
+		// Redis operation failed, decide based on failOpen setting
+		if r.failOpen {
+			return true, r.maxTokens, now.Add(r.window)
+		}
+		return false, 0, now.Add(r.window)
 	}
 
 	values, ok := result.([]interface{})
 	if !ok || len(values) < 3 {
-		return true, r.maxTokens, now.Add(r.window)
+		if r.failOpen {
+			return true, r.maxTokens, now.Add(r.window)
+		}
+		return false, 0, now.Add(r.window)
 	}
 
 	allowed := values[0].(int64) == 1
@@ -209,16 +257,38 @@ func (r *RedisRateLimiter) AllowN(key string, n int64) (bool, int64, time.Time) 
 	return allowed, remaining, resetTime
 }
 
+// key generates the full Redis key with namespace
+func (r *RedisRateLimiter) key(k string) string {
+	return fmt.Sprintf("%s%s", r.namespace, k)
+}
+
+// Health checks if the Redis rate limiter is healthy
+func (r *RedisRateLimiter) Health() error {
+	return r.Ping()
+}
+
+// Ping checks if the Redis connection is alive
+func (r *RedisRateLimiter) Ping() error {
+	ctx, cancel := context.WithTimeout(r.ctx, 2*time.Second)
+	defer cancel()
+	return r.client.Ping(ctx).Err()
+}
+
 // Reset removes the rate limit entry for a specific key
 func (r *RedisRateLimiter) Reset(key string) {
-	r.client.Del(r.ctx, r.key(key))
+	ctx, cancel := context.WithTimeout(r.ctx, 1*time.Second)
+	defer cancel()
+	r.client.Del(ctx, r.key(key))
 }
 
 // GetLimit returns the current limit and remaining tokens for a key
 func (r *RedisRateLimiter) GetLimit(key string) (int64, int64, error) {
 	fullKey := r.key(key)
-	
-	result, err := r.client.HGet(r.ctx, fullKey, "tokens").Result()
+
+	ctx, cancel := context.WithTimeout(r.ctx, 1*time.Second)
+	defer cancel()
+
+	result, err := r.client.HGet(ctx, fullKey, "tokens").Result()
 	if err == redis.Nil {
 		return r.maxTokens, r.maxTokens, nil
 	} else if err != nil {
@@ -233,18 +303,8 @@ func (r *RedisRateLimiter) GetLimit(key string) (int64, int64, error) {
 	return r.maxTokens, remaining, nil
 }
 
-// key generates the full Redis key with namespace
-func (r *RedisRateLimiter) key(k string) string {
-	return fmt.Sprintf("%s%s", r.namespace, k)
-}
-
-// Ping checks if the Redis connection is alive
-func (r *RedisRateLimiter) Ping() error {
-	return r.client.Ping(r.ctx).Err()
-}
-
-// Close closes the Redis connection
+// Close closes the Redis connection and stops the health check goroutine
 func (r *RedisRateLimiter) Close() error {
+	// Note: The health check goroutine will stop when the client is closed
 	return r.client.Close()
 }
-
