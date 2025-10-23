@@ -29,7 +29,12 @@ func NewRedisRateLimiter(config *models.RedisConfig, maxRequests int64, window t
 	client := redis.NewClient(&redis.Options{
 		Addr:     config.Address,
 		Password: config.Password,
-		DB:       *config.DB,
+		DB: func() int {
+			if config.DB == nil {
+				return 0
+			}
+			return *config.DB
+		}(),
 	})
 
 	namespace := config.KeyNamespace
