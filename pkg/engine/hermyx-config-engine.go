@@ -57,7 +57,6 @@ func InstantiateHermyxEngine(configPath string) *HermyxEngine {
 		log.Fatalf("Unable to instantiate the logger: %v", err)
 	}
 
-	logger_.Debug(fmt.Sprintf("Loaded config: %+v", config))
 	// Intelligent defaults
 	if config.Server == nil || config.Server.Port == 0 {
 		logger_.Warn("Server port not specified defaulting to random port.")

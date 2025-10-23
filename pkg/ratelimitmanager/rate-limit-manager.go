@@ -81,15 +81,12 @@ func (rlm *RateLimitManager) SetHeaders(ctx *fasthttp.RequestCtx, result *rateli
 	fmt.Println("Setting rate limit headers...", *config.Headers)
 
 	if config.Headers.IncludeLimit {
-		fmt.Printf("Setting X-Ratelimit-Limit: %d\n", result.Limit)
 		ctx.Response.Header.Set("X-Ratelimit-Limit", fmt.Sprintf("%d", result.Limit))
 	}
 	if config.Headers.IncludeRemaining {
-		fmt.Printf("Setting IncludeRemaining %d\n", result.Remaining)
 		ctx.Response.Header.Set("X-Ratelimit-Remaining", fmt.Sprintf("%d", result.Remaining))
 	}
 	if config.Headers.IncludeReset {
-		fmt.Printf("Setting X-Ratelimit-Reset: %d\n", result.Remaining)
 		ctx.Response.Header.Set("X-Ratelimit-Reset", fmt.Sprintf("%d", result.ResetTime.Unix()))
 	}
 }
