@@ -3,6 +3,7 @@ package ratelimit
 import (
 	"fmt"
 	"hermyx/pkg/models"
+	"hermyx/pkg/utils/logger"
 	"strings"
 	"time"
 
@@ -38,7 +39,7 @@ type RateLimitResult struct {
 }
 
 // NewRateLimiterBackend creates a new rate limiter backend based on global configuration
-func NewRateLimiter(config *models.RateLimitConfig) (IRateLimiter, error) {
+func NewRateLimiter(config *models.RateLimitConfig, logger *logger.Logger) (IRateLimiter, error) {
 	if config == nil || !config.Enabled {
 		return nil, nil
 	}
@@ -58,12 +59,12 @@ func NewRateLimiter(config *models.RateLimitConfig) (IRateLimiter, error) {
 
 	switch strings.ToLower(config.Storage) {
 	case STORAGE_MEMORY:
-		limiter = NewMemoryRateLimiter(config.Requests, config.Window)
+		limiter = NewMemoryRateLimiter(config.Requests, config.Window, logger)
 	case STORAGE_REDIS:
 		if config.Redis == nil {
 			return nil, fmt.Errorf("redis configuration required for redis rate limiter")
 		}
-		limiter = NewRedisRateLimiter(config.Redis, config.Requests, config.Window)
+		limiter = NewRedisRateLimiter(config.Redis, config.Requests, config.Window, logger)
 	default:
 		return nil, fmt.Errorf("unsupported rate limit storage type: %s", config.Storage)
 	}

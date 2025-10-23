@@ -6,7 +6,7 @@ import (
 )
 
 func TestMemoryRateLimiter_Allow(t *testing.T) {
-	limiter := NewMemoryRateLimiter(10, 1*time.Minute)
+	limiter := NewMemoryRateLimiter(10, 1*time.Minute, createTestLogger(t))
 	defer limiter.Close()
 
 	key := "test-key"
@@ -38,7 +38,7 @@ func TestMemoryRateLimiter_Allow(t *testing.T) {
 
 func TestMemoryRateLimiter_TokenRefill(t *testing.T) {
 	// Use a small window for faster testing
-	limiter := NewMemoryRateLimiter(5, 2*time.Second)
+	limiter := NewMemoryRateLimiter(5, 2*time.Second, createTestLogger(t))
 	defer limiter.Close()
 
 	key := "test-refill"
@@ -68,7 +68,7 @@ func TestMemoryRateLimiter_TokenRefill(t *testing.T) {
 }
 
 func TestMemoryRateLimiter_MultipleKeys(t *testing.T) {
-	limiter := NewMemoryRateLimiter(3, 1*time.Minute)
+	limiter := NewMemoryRateLimiter(3, 1*time.Minute, createTestLogger(t))
 	defer limiter.Close()
 
 	key1 := "user1"
@@ -96,7 +96,7 @@ func TestMemoryRateLimiter_MultipleKeys(t *testing.T) {
 }
 
 func TestMemoryRateLimiter_Reset(t *testing.T) {
-	limiter := NewMemoryRateLimiter(3, 1*time.Minute)
+	limiter := NewMemoryRateLimiter(3, 1*time.Minute, createTestLogger(t))
 	defer limiter.Close()
 
 	key := "test-reset"
@@ -123,7 +123,7 @@ func TestMemoryRateLimiter_Reset(t *testing.T) {
 }
 
 func TestMemoryRateLimiter_Cleanup(t *testing.T) {
-	limiter := NewMemoryRateLimiter(10, 100*time.Millisecond)
+	limiter := NewMemoryRateLimiter(10, 100*time.Millisecond, createTestLogger(t))
 	defer limiter.Close()
 
 	// Create a bucket
@@ -145,7 +145,7 @@ func TestMemoryRateLimiter_Cleanup(t *testing.T) {
 }
 
 func BenchmarkMemoryRateLimiter_Allow(b *testing.B) {
-	limiter := NewMemoryRateLimiter(10000, 1*time.Minute)
+	limiter := NewMemoryRateLimiter(10000, 1*time.Minute, createBenchmarkLogger(b))
 	defer limiter.Close()
 
 	b.ResetTimer()
@@ -155,7 +155,7 @@ func BenchmarkMemoryRateLimiter_Allow(b *testing.B) {
 }
 
 func BenchmarkMemoryRateLimiter_AllowMultipleKeys(b *testing.B) {
-	limiter := NewMemoryRateLimiter(10000, 1*time.Minute)
+	limiter := NewMemoryRateLimiter(10000, 1*time.Minute, createBenchmarkLogger(b))
 	defer limiter.Close()
 
 	keys := []string{"key1", "key2", "key3", "key4", "key5"}
@@ -166,4 +166,3 @@ func BenchmarkMemoryRateLimiter_AllowMultipleKeys(b *testing.B) {
 		limiter.Allow(key)
 	}
 }
-

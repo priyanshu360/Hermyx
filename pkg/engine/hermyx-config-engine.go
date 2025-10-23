@@ -141,7 +141,7 @@ func InstantiateHermyxEngine(configPath string) *HermyxEngine {
 	// Initialize rate limit manager (single backend like cache)
 	var rateLimitManager *ratelimitmanager.RateLimitManager
 	if config.RateLimit != nil && config.RateLimit.Enabled {
-		rateLimiter, err := ratelimit.NewRateLimiter(config.RateLimit)
+		rateLimiter, err := ratelimit.NewRateLimiter(config.RateLimit, logger_)
 		if err != nil {
 			log.Fatalf("Failed to initialize rate limiter : %v", err)
 		} else {

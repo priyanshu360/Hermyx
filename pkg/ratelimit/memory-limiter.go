@@ -1,7 +1,7 @@
 package ratelimit
 
 import (
-	"fmt"
+	"hermyx/pkg/utils/logger"
 	"sync"
 	"time"
 )
@@ -22,15 +22,18 @@ type MemoryRateLimiter struct {
 	maxTokens int64
 	window    time.Duration
 	ttl       time.Duration // Cleanup TTL for idle buckets
+	logger    *logger.Logger
 }
 
 // NewMemoryRateLimiter creates a new in-memory rate limiter
-func NewMemoryRateLimiter(maxRequests int64, window time.Duration) *MemoryRateLimiter {
+func NewMemoryRateLimiter(maxRequests int64, window time.Duration, logger *logger.Logger) *MemoryRateLimiter {
+	// Logger is always provided - no need for nil checks
 	limiter := &MemoryRateLimiter{
 		buckets:   make(map[string]*TokenBucket),
 		maxTokens: maxRequests,
 		window:    window,
 		ttl:       window * 2, // Keep buckets around for 2x window duration
+		logger:    logger,
 	}
 
 	// Start cleanup goroutine
@@ -50,20 +53,26 @@ func (m *MemoryRateLimiter) Allow(key string) (bool, int64, time.Time) {
 func (m *MemoryRateLimiter) AllowWithLimit(key string, limit int64, window time.Duration) (bool, int64, time.Time) {
 	m.mu.Lock()
 	bucket, exists := m.buckets[key]
-	fmt.Println("MemoryRateLimiter: Checking key =", key, "Exists =", exists)
 	if !exists {
 		bucket = m.createBucketWithLimit(limit, window)
 		m.buckets[key] = bucket
+		m.logger.Debug("Created new token bucket for key")
 	}
 	m.mu.Unlock()
 
-	fmt.Printf("MemoryRateLimiter: AllowWithLimit key=%s, limit=%d, window=%s\n", key, limit, window.String())
 	refillRate := int64(float64(limit) / window.Seconds())
 	if refillRate < 1 {
 		refillRate = 1
 	}
-	fmt.Println("MemoryRateLimiter: Refill rate =", refillRate, "tokens/second")
-	return bucket.consumeWithLimit(limit, refillRate)
+	allowed, remaining, resetTime := bucket.consumeWithLimit(limit, refillRate)
+
+	if allowed {
+		m.logger.Debug("Rate limit check passed")
+	} else {
+		m.logger.Debug("Rate limit check failed")
+	}
+
+	return allowed, remaining, resetTime
 }
 
 // createBucket creates a new token bucket
@@ -172,6 +181,7 @@ func (m *MemoryRateLimiter) cleanup() {
 
 // Reset removes the rate limit entry for a specific key
 func (m *MemoryRateLimiter) Reset(key string) {
+	m.logger.Debug("Resetting rate limit for key")
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	delete(m.buckets, key)
@@ -179,12 +189,14 @@ func (m *MemoryRateLimiter) Reset(key string) {
 
 // Health checks if the memory rate limiter is healthy
 func (m *MemoryRateLimiter) Health() error {
+	m.logger.Debug("Memory rate limiter health check")
 	// Memory rate limiter is always healthy as it doesn't depend on external services
 	return nil
 }
 
 // Close cleans up resources
 func (m *MemoryRateLimiter) Close() error {
+	m.logger.Debug("Closing memory rate limiter")
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.buckets = make(map[string]*TokenBucket)

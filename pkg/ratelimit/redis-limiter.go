@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"hermyx/pkg/models"
+	"hermyx/pkg/utils/logger"
 	"strconv"
 	"time"
 
@@ -22,10 +23,11 @@ type RedisRateLimiter struct {
 	window    time.Duration
 	ctx       context.Context
 	failOpen  bool // If true, allow requests when Redis is down; if false, block them
+	logger    *logger.Logger
 }
 
 // NewRedisRateLimiter creates a new Redis-based rate limiter
-func NewRedisRateLimiter(config *models.RedisConfig, maxRequests int64, window time.Duration) *RedisRateLimiter {
+func NewRedisRateLimiter(config *models.RedisConfig, maxRequests int64, window time.Duration, logger *logger.Logger) *RedisRateLimiter {
 	client := redis.NewClient(&redis.Options{
 		Addr:     config.Address,
 		Password: config.Password,
@@ -57,6 +59,7 @@ func NewRedisRateLimiter(config *models.RedisConfig, maxRequests int64, window t
 		window:    window,
 		ctx:       context.Background(),
 		failOpen:  failOpen,
+		logger:    logger,
 	}
 }
 
@@ -73,6 +76,7 @@ func (r *RedisRateLimiter) AllowWithLimit(key string, limit int64, window time.D
 
 	// If limit is 0, immediately block the request
 	if limit <= 0 {
+		r.logger.Debug("Rate limit blocked: limit is 0")
 		return false, 0, now.Add(window)
 	}
 
@@ -141,17 +145,21 @@ func (r *RedisRateLimiter) AllowWithLimit(key string, limit int64, window time.D
 
 	if err != nil {
 		// Redis operation failed, decide based on failOpen setting
+		r.logger.Error("Redis rate limit operation failed: " + err.Error())
 		if r.failOpen {
 			// Fail open: allow the request
+			r.logger.Info("Redis unavailable, failing open - allowing request")
 			return true, limit, now.Add(window)
 		}
 		// Fail closed: block the request
+		r.logger.Info("Redis unavailable, failing closed - blocking request")
 		return false, 0, now.Add(window)
 	}
 
 	values, ok := result.([]interface{})
 	if !ok || len(values) < 3 {
 		// Invalid response, decide based on failOpen setting
+		r.logger.Error("Invalid Redis response format")
 		if r.failOpen {
 			return true, limit, now.Add(window)
 		}
@@ -162,6 +170,12 @@ func (r *RedisRateLimiter) AllowWithLimit(key string, limit int64, window time.D
 	remaining := values[1].(int64)
 	resetTimestamp := values[2].(int64)
 	resetTime := time.Unix(resetTimestamp, 0)
+
+	if allowed {
+		r.logger.Debug("Rate limit check passed")
+	} else {
+		r.logger.Debug("Rate limit check failed")
+	}
 
 	return allowed, remaining, resetTime
 }
@@ -269,21 +283,34 @@ func (r *RedisRateLimiter) key(k string) string {
 
 // Health checks if the Redis rate limiter is healthy
 func (r *RedisRateLimiter) Health() error {
-	return r.Ping()
+	r.logger.Debug("Checking Redis rate limiter health")
+	err := r.Ping()
+	if err != nil {
+		r.logger.Error("Redis rate limiter health check failed: " + err.Error())
+	}
+	return err
 }
 
 // Ping checks if the Redis connection is alive
 func (r *RedisRateLimiter) Ping() error {
 	ctx, cancel := context.WithTimeout(r.ctx, 2*time.Second)
 	defer cancel()
-	return r.client.Ping(ctx).Err()
+	err := r.client.Ping(ctx).Err()
+	if err != nil {
+		r.logger.Error("Redis ping failed: " + err.Error())
+	}
+	return err
 }
 
 // Reset removes the rate limit entry for a specific key
 func (r *RedisRateLimiter) Reset(key string) {
+	r.logger.Debug("Resetting rate limit for key")
 	ctx, cancel := context.WithTimeout(r.ctx, 1*time.Second)
 	defer cancel()
-	r.client.Del(ctx, r.key(key))
+	err := r.client.Del(ctx, r.key(key)).Err()
+	if err != nil {
+		r.logger.Error("Failed to reset rate limit key: " + err.Error())
+	}
 }
 
 // GetLimit returns the current limit and remaining tokens for a key
@@ -310,6 +337,10 @@ func (r *RedisRateLimiter) GetLimit(key string) (int64, int64, error) {
 
 // Close closes the Redis connection and stops the health check goroutine
 func (r *RedisRateLimiter) Close() error {
-	// Note: The health check goroutine will stop when the client is closed
-	return r.client.Close()
+	r.logger.Debug("Closing Redis rate limiter")
+	err := r.client.Close()
+	if err != nil {
+		r.logger.Error("Failed to close Redis client: " + err.Error())
+	}
+	return err
 }

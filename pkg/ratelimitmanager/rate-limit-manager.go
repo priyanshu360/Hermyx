@@ -51,7 +51,6 @@ func (rlm *RateLimitManager) Check(ctx *fasthttp.RequestCtx, config *models.Rate
 	}
 
 	key := ratelimit.BuildKey(ctx, config)
-	fmt.Println("Rate limit key:", key)
 	allowed, remaining, resetTime := rlm.limiter.AllowWithLimit(key, config.Requests, config.Window)
 
 	return &ratelimit.RateLimitResult{
@@ -79,8 +78,6 @@ func (rlm *RateLimitManager) SetHeaders(ctx *fasthttp.RequestCtx, result *rateli
 	if config == nil || config.Headers == nil {
 		return
 	}
-
-	fmt.Println("Setting rate limit headers...", *config.Headers)
 
 	if config.Headers.IncludeLimit {
 		ctx.Response.Header.Set("X-Ratelimit-Limit", fmt.Sprintf("%d", result.Limit))
