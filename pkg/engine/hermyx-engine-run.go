@@ -74,6 +74,9 @@ func (engine *HermyxEngine) Run() {
 	if err := server.Shutdown(); err != nil {
 		engine.logger.Error(fmt.Sprintf("Server shutdown error: %v", err))
 	}
+	if cerr := engine.cleanup(); cerr != nil {
+		engine.logger.Error(fmt.Sprintf("Cleanup error: %v", cerr))
+	}
 }
 
 func (engine *HermyxEngine) rateLimitMiddleware(next fasthttp.RequestHandler) fasthttp.RequestHandler {
