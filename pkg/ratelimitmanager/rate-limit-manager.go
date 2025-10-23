@@ -5,6 +5,7 @@ import (
 	"hermyx/pkg/models"
 	"hermyx/pkg/ratelimit"
 	"hermyx/pkg/utils/logger"
+	"sync"
 	"time"
 
 	"github.com/valyala/fasthttp"
@@ -16,6 +17,7 @@ type RateLimitManager struct {
 	logger       *logger.Logger
 	healthTicker *time.Ticker
 	stopChan     chan struct{}
+	closeOnce    sync.Once
 }
 
 func NewRateLimitManager(limiter ratelimit.IRateLimiter, logger *logger.Logger) *RateLimitManager {
@@ -126,17 +128,20 @@ func (rlm *RateLimitManager) performHealthCheck() {
 
 // Close cleans up resources
 func (rlm *RateLimitManager) Close() error {
-	// Stop health monitoring
-	if rlm.healthTicker != nil {
-		rlm.healthTicker.Stop()
-	}
-	if rlm.stopChan != nil {
-		close(rlm.stopChan)
-	}
-
-	// Close the limiter
-	if rlm.limiter != nil {
-		return rlm.limiter.Close()
-	}
-	return nil
+	var err error
+	rlm.closeOnce.Do(func() {
+		// Stop health monitoring
+		if rlm.healthTicker != nil {
+			rlm.healthTicker.Stop()
+		}
+		if rlm.stopChan != nil {
+			close(rlm.stopChan)
+			rlm.stopChan = nil
+		}
+		// Close the limiter
+		if rlm.limiter != nil {
+			err = rlm.limiter.Close()
+		}
+	})
+	return err
 }

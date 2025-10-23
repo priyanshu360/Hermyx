@@ -112,7 +112,7 @@ routes:
       enabled: true
       requests: 1           # Override: stricter limit
       window: 1m
-      keyBy: ["ip"]  # Override: rate limit by user + IP
+      keyBy: ["ip"]  
       blockDuration: 10m      # Override: longer block
       message: "User API rate limit exceeded"
       # Note: Uses global Redis storage, cannot override here
