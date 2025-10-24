@@ -23,6 +23,7 @@ type MemoryRateLimiter struct {
 	window    time.Duration
 	ttl       time.Duration // Cleanup TTL for idle buckets
 	logger    *logger.Logger
+	stopChan  chan struct{}
 }
 
 // NewMemoryRateLimiter creates a new MemoryRateLimiter backed by in-memory token buckets.
@@ -39,6 +40,7 @@ func NewMemoryRateLimiter(maxRequests int64, window time.Duration, logger *logge
 		window:    window,
 		ttl:       window * 2, // Keep buckets around for 2x window duration
 		logger:    logger,
+		stopChan:  make(chan struct{}),
 	}
 
 	// Start cleanup goroutine
@@ -80,21 +82,6 @@ func (m *MemoryRateLimiter) AllowWithLimit(key string, limit int64, window time.
 	return allowed, remaining, resetTime
 }
 
-// createBucket creates a new token bucket
-func (m *MemoryRateLimiter) createBucket() *TokenBucket {
-	refillRate := int64(float64(m.maxTokens) / m.window.Seconds())
-	if refillRate < 1 {
-		refillRate = 1
-	}
-
-	return &TokenBucket{
-		tokens:         m.maxTokens,
-		maxTokens:      m.maxTokens,
-		refillRate:     refillRate,
-		lastRefillTime: time.Now(),
-	}
-}
-
 // createBucketWithLimit creates a new token bucket with specific limit and window
 func (m *MemoryRateLimiter) createBucketWithLimit(limit int64, window time.Duration) *TokenBucket {
 	refillRate := int64(float64(limit) / window.Seconds())
@@ -108,11 +95,6 @@ func (m *MemoryRateLimiter) createBucketWithLimit(limit int64, window time.Durat
 		refillRate:     refillRate,
 		lastRefillTime: time.Now(),
 	}
-}
-
-// consume attempts to consume a token from the bucket
-func (tb *TokenBucket) consume() (bool, int64, time.Time) {
-	return tb.consumeWithLimit(tb.maxTokens, tb.refillRate)
 }
 
 // consumeWithLimit attempts to consume a token from the bucket with specific limit and refill rate
@@ -168,19 +150,24 @@ func (m *MemoryRateLimiter) cleanup() {
 	ticker := time.NewTicker(m.ttl)
 	defer ticker.Stop()
 
-	for range ticker.C {
-		m.mu.Lock()
-		now := time.Now()
-		for key, bucket := range m.buckets {
-			bucket.mu.Lock()
-			idle := now.Sub(bucket.lastRefillTime)
-			bucket.mu.Unlock()
+	for {
+		select {
+		case <-ticker.C:
+			m.mu.Lock()
+			now := time.Now()
+			for key, bucket := range m.buckets {
+				bucket.mu.Lock()
+				idle := now.Sub(bucket.lastRefillTime)
+				bucket.mu.Unlock()
 
-			if idle > m.ttl {
-				delete(m.buckets, key)
+				if idle > m.ttl {
+					delete(m.buckets, key)
+				}
 			}
+			m.mu.Unlock()
+		case <-m.stopChan:
+			return
 		}
-		m.mu.Unlock()
 	}
 }
 
@@ -202,6 +189,12 @@ func (m *MemoryRateLimiter) Health() error {
 // Close cleans up resources
 func (m *MemoryRateLimiter) Close() error {
 	m.logger.Debug("Closing memory rate limiter")
+
+	// Signal the cleanup goroutine to stop
+	if m.stopChan != nil {
+		close(m.stopChan)
+	}
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.buckets = make(map[string]*TokenBucket)

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"hermyx/pkg/models"
 	"hermyx/pkg/ratelimit"
+	"math"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -168,7 +169,10 @@ func (engine *HermyxEngine) handleRateLimitExceeded(ctx *fasthttp.RequestCtx, re
 	engine.logger.Warn(fmt.Sprintf("Rate limit exceeded for key: %s", result.Key))
 
 	engine.rateLimitManager.SetHeaders(ctx, result, config)
-	ctx.Response.Header.Set("Retry-After", fmt.Sprintf("%d", int(time.Until(result.ResetTime).Seconds())))
+
+	// Calculate Retry-After header with ceiling and clamp to zero
+	secs := max(int(math.Ceil(time.Until(result.ResetTime).Seconds())), 0)
+	ctx.Response.Header.Set("Retry-After", fmt.Sprintf("%d", secs))
 
 	ctx.SetStatusCode(statusCode)
 	ctx.SetBodyString(message)

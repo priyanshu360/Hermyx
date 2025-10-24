@@ -418,8 +418,13 @@ Hermyx automatically adds standard rate limit headers:
 
 * `X-RateLimit-Limit`: Maximum requests allowed
 * `X-RateLimit-Remaining`: Requests remaining in current window
-* `X-RateLimit-Reset`: Time when the rate limit resets
-* `Retry-After`: Seconds to wait before retrying
+* `X-RateLimit-Reset`: Time when the rate limit resets (emitted as epoch seconds/Unix timestamp)
+* `Retry-After`: Seconds to wait before retrying (emitted as delta seconds, automatically set on 429 responses)
+
+Header emission is controlled by three configuration toggles:
+- `includeLimit`: Controls `X-RateLimit-Limit` header
+- `includeRemaining`: Controls `X-RateLimit-Remaining` header  
+- `includeReset`: Controls `X-RateLimit-Reset` header
 
 ### Default Values
 

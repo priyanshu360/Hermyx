@@ -38,6 +38,23 @@ func NewRateLimitManager(limiter ratelimit.IRateLimiter, logger *logger.Logger) 
 
 // Resolve merges route-specific rate limit config with global config
 func (rlm *RateLimitManager) Resolve(globalConfig *models.RateLimitConfig, routeConfig *models.RateLimitConfig) *models.RateLimitConfig {
+	// Check for route-level Storage/Redis settings and warn if present
+	if routeConfig != nil {
+		var ignoredFields []string
+
+		if routeConfig.Storage != "" {
+			ignoredFields = append(ignoredFields, "Storage")
+		}
+
+		if routeConfig.Redis != nil {
+			ignoredFields = append(ignoredFields, "Redis")
+		}
+
+		if len(ignoredFields) > 0 {
+			rlm.logger.Warn(fmt.Sprintf("Route-level rate limit settings (%s) are ignored; global config will be used", strings.Join(ignoredFields, ", ")))
+		}
+	}
+
 	return ratelimit.Resolve(globalConfig, routeConfig)
 }
 
@@ -71,6 +88,18 @@ func (rlm *RateLimitManager) Check(ctx *fasthttp.RequestCtx, config *models.Rate
 			Limit:     -1,
 		}
 	}
+
+	// Check for nil rate limit parameters
+	if config.Requests == nil || config.Window == nil {
+		rlm.logger.Warn("Rate limit parameters are missing (Requests or Window is nil), allowing request to avoid penalizing traffic")
+		return &ratelimit.RateLimitResult{
+			Allowed:   true,
+			Remaining: -1,
+			ResetTime: time.Time{},
+			Limit:     -1,
+		}
+	}
+
 	allowed, remaining, resetTime := rlm.limiter.AllowWithLimit(key, *config.Requests, *config.Window)
 
 	if allowed {

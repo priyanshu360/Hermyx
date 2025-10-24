@@ -390,11 +390,17 @@ func TestRateLimiter_BuildKey_MissingHeader(t *testing.T) {
 	}
 
 	ctx := &fasthttp.RequestCtx{}
-	// Don't set the header
+	// Set a deterministic IP for testing fallback behavior
+	ctx.Request.Header.Set("X-Forwarded-For", "192.168.1.100")
+	// Don't set the X-API-Key header
 
 	key := BuildKey(ctx, config)
-	if key != "" {
-		t.Errorf("Expected empty key when header missing, got '%s'", key)
+	expectedKey := "192.168.1.100"
+	if key != expectedKey {
+		t.Errorf("Expected key to fallback to IP when header missing, got '%s', expected '%s'", key, expectedKey)
+	}
+	if key == "" {
+		t.Error("Expected non-empty key when header missing (should fallback to IP)")
 	}
 }
 

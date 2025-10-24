@@ -80,6 +80,12 @@ func (r *RedisRateLimiter) AllowWithLimit(key string, limit int64, window time.D
 		return false, 0, now.Add(window)
 	}
 
+	// If window is 0 or negative, block the request to prevent division by zero
+	if window <= 0 {
+		r.logger.Error("Rate limit blocked: window is 0 or negative, preventing division by zero")
+		return false, 0, now.Add(1 * time.Second)
+	}
+
 	fullKey := r.key(key)
 	nowUnix := now.Unix()
 
@@ -191,113 +197,6 @@ func (r *RedisRateLimiter) AllowWithLimit(key string, limit int64, window time.D
 	return allowed, remaining, resetTime
 }
 
-// AllowN checks if N requests should be allowed for the given key
-// This is useful for bulk operations
-func (r *RedisRateLimiter) AllowN(key string, n int64) (bool, int64, time.Time) {
-	now := time.Now()
-
-	if n <= 0 {
-		return true, r.maxTokens, now
-	}
-
-	fullKey := r.key(key)
-	nowUnix := now.Unix()
-
-	script := `
-		local key = KEYS[1]
-		local max_tokens = tonumber(ARGV[1])
-		local refill_rate = tonumber(ARGV[2])
-		local now = tonumber(ARGV[3])
-		local window = tonumber(ARGV[4])
-		local n = tonumber(ARGV[5])
-		
-		-- Get current state
-		local state = redis.call('HMGET', key, 'tokens', 'last_refill')
-		local tokens = tonumber(state[1]) or max_tokens
-		local last_refill = tonumber(state[2]) or now
-		
-		-- Calculate tokens to add
-		local elapsed = now - last_refill
-		local tokens_to_add = math.floor(elapsed * refill_rate)
-		
-		if tokens_to_add > 0 then
-			tokens = math.min(tokens + tokens_to_add, max_tokens)
-			last_refill = now
-		end
-		
-		-- Try to consume n tokens
-		local allowed = 0
-		if tokens >= n then
-			tokens = tokens - n
-			allowed = 1
-		end
-		
-		-- Update state
-		redis.call('HMSET', key, 'tokens', tokens, 'last_refill', last_refill)
-		redis.call('EXPIRE', key, window * 2)
-		
-		-- Calculate reset time
-		local tokens_needed = max_tokens - tokens
-		local seconds_to_reset = 0
-		if tokens_needed > 0 and refill_rate > 0 then
-			seconds_to_reset = math.ceil(tokens_needed / refill_rate)
-		end
-		
-		return {allowed, tokens, now + seconds_to_reset}
-	`
-
-	refillRate := float64(r.maxTokens) / r.window.Seconds()
-	if refillRate < 0.01 {
-		refillRate = 0.01
-	}
-
-	// Use a timeout context for the Redis operation
-	ctx, cancel := context.WithTimeout(r.ctx, 500*time.Millisecond)
-	defer cancel()
-
-	result, err := r.client.Eval(ctx, script, []string{fullKey},
-		r.maxTokens,
-		refillRate,
-		nowUnix,
-		int64(r.window.Seconds()),
-		n,
-	).Result()
-
-	if err != nil {
-		// Redis operation failed, decide based on failOpen setting
-		if r.failOpen {
-			return true, r.maxTokens, now.Add(r.window)
-		}
-		return false, 0, now.Add(r.window)
-	}
-
-	values, ok := result.([]interface{})
-	if !ok || len(values) < 3 {
-		if r.failOpen {
-			return true, r.maxTokens, now.Add(r.window)
-		}
-		return false, 0, now.Add(r.window)
-	}
-
-	// Safely convert Redis values with defensive type checking
-	allowed, allowedOk := safeConvertToBool(values[0])
-	remaining, remainingOk := safeConvertToInt64(values[1])
-	resetTimestamp, resetOk := safeConvertToInt64(values[2])
-
-	// If any conversion fails, fall back to failOpen behavior
-	if !allowedOk || !remainingOk || !resetOk {
-		r.logger.Error("Failed to convert Redis response values safely")
-		if r.failOpen {
-			return true, r.maxTokens, now.Add(r.window)
-		}
-		return false, 0, now.Add(r.window)
-	}
-
-	resetTime := time.Unix(resetTimestamp, 0)
-
-	return allowed, remaining, resetTime
-}
-
 // key generates the full Redis key with namespace
 func (r *RedisRateLimiter) key(k string) string {
 	return fmt.Sprintf("%s%s", r.namespace, k)
@@ -306,20 +205,11 @@ func (r *RedisRateLimiter) key(k string) string {
 // Health checks if the Redis rate limiter is healthy
 func (r *RedisRateLimiter) Health() error {
 	r.logger.Debug("Checking Redis rate limiter health")
-	err := r.Ping()
-	if err != nil {
-		r.logger.Error("Redis rate limiter health check failed: " + err.Error())
-	}
-	return err
-}
-
-// Ping checks if the Redis connection is alive
-func (r *RedisRateLimiter) Ping() error {
 	ctx, cancel := context.WithTimeout(r.ctx, 2*time.Second)
 	defer cancel()
 	err := r.client.Ping(ctx).Err()
 	if err != nil {
-		r.logger.Error("Redis ping failed: " + err.Error())
+		r.logger.Error("Redis rate limiter health check failed: " + err.Error())
 	}
 	return err
 }
@@ -333,28 +223,6 @@ func (r *RedisRateLimiter) Reset(key string) {
 	if err != nil {
 		r.logger.Error("Failed to reset rate limit key: " + err.Error())
 	}
-}
-
-// GetLimit returns the current limit and remaining tokens for a key
-func (r *RedisRateLimiter) GetLimit(key string) (int64, int64, error) {
-	fullKey := r.key(key)
-
-	ctx, cancel := context.WithTimeout(r.ctx, 1*time.Second)
-	defer cancel()
-
-	result, err := r.client.HGet(ctx, fullKey, "tokens").Result()
-	if err == redis.Nil {
-		return r.maxTokens, r.maxTokens, nil
-	} else if err != nil {
-		return 0, 0, err
-	}
-
-	remaining, err := strconv.ParseInt(result, 10, 64)
-	if err != nil {
-		return r.maxTokens, r.maxTokens, nil
-	}
-
-	return r.maxTokens, remaining, nil
 }
 
 // safeConvertToInt64 converts common Redis-encoded numeric values to int64.
@@ -432,7 +300,7 @@ func safeConvertToBool(value interface{}) (bool, bool) {
 	}
 }
 
-// Close closes the Redis connection and stops the health check goroutine
+// Close closes the Redis client/connection; it does not manage any goroutines
 func (r *RedisRateLimiter) Close() error {
 	r.logger.Debug("Closing Redis rate limiter")
 	err := r.client.Close()
