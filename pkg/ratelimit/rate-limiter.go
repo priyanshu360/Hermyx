@@ -39,7 +39,16 @@ type RateLimitResult struct {
 }
 
 // NewRateLimiterBackend creates a new rate limiter backend based on global configuration
-// SetDefaults sets default values for any nil pointer fields in the RateLimitConfig
+// SetDefaults populates a RateLimitConfig with sensible defaults for any missing or nil fields.
+// If config is nil the function returns immediately.
+// Defaults applied:
+//   - Requests: 100
+//   - Window: 1 minute
+//   - BlockDuration: 1 minute
+//   - StatusCode: 429
+//   - Storage: "memory"
+//   - KeyBy: []string{"ip"}
+//   - Message: "Rate limit exceeded"
 func SetDefaults(config *models.RateLimitConfig) {
 	if config == nil {
 		return
@@ -75,6 +84,12 @@ func SetDefaults(config *models.RateLimitConfig) {
 	}
 }
 
+// NewRateLimiter creates an IRateLimiter instance using the provided rate limit configuration and logger.
+// If config is nil or config.Enabled is false the function returns (nil, nil).
+// The configuration is defaulted via SetDefaults before use. Supported storage types:
+// - STORAGE_MEMORY: returns an in-memory limiter.
+// - STORAGE_REDIS: returns a Redis-backed limiter and requires config.Redis to be non-nil.
+// An error is returned if Redis is selected but config.Redis is missing, or if the storage type is unsupported.
 func NewRateLimiter(config *models.RateLimitConfig, logger *logger.Logger) (IRateLimiter, error) {
 	if config == nil || !config.Enabled {
 		return nil, nil
@@ -100,7 +115,11 @@ func NewRateLimiter(config *models.RateLimitConfig, logger *logger.Logger) (IRat
 	return limiter, nil
 }
 
-// BuildKey builds a rate limit key based on the configuration
+// BuildKey constructs a rate-limit key for the given request according to the provided configuration.
+// It composes key parts from config.KeyBy (supported values: "ip" and "header:<name>"), joining parts with ":".
+// If config is nil or config.KeyBy is empty, the client's IP is returned.
+// For header entries, the header value is used when present; if a required header is missing the client's IP is used instead.
+// If no parts are produced, the function falls back to the client's IP.
 func BuildKey(ctx *fasthttp.RequestCtx, config *models.RateLimitConfig) string {
 	if config == nil || len(config.KeyBy) == 0 {
 		// Default to IP
@@ -134,7 +153,8 @@ func BuildKey(ctx *fasthttp.RequestCtx, config *models.RateLimitConfig) string {
 	return strings.Join(parts, ":")
 }
 
-// getClientIP extracts the client IP from the request
+// getClientIP extracts the client's IP address from the request context.
+// It prefers the first entry of the `X-Forwarded-For` header, falls back to `X-Real-IP`, and uses the request's remote address if neither header is present.
 func getClientIP(ctx *fasthttp.RequestCtx) string {
 	// Check X-Forwarded-For header first
 	xff := string(ctx.Request.Header.Peek("X-Forwarded-For"))
@@ -155,7 +175,10 @@ func getClientIP(ctx *fasthttp.RequestCtx) string {
 }
 
 // Resolve merges route-specific rate limit config with global config
-// IMPORTANT: Storage and Redis are ALWAYS inherited from global config and cannot be overridden per route
+// Resolve merges a route-level rate limit configuration with a global configuration.
+// If routeConfig is nil, Resolve returns globalConfig. If routeConfig exists but Enabled is false, it returns routeConfig unchanged.
+// For an enabled routeConfig, values present in routeConfig are preserved while missing values are inherited from globalConfig for: Requests, Window, KeyBy, BlockDuration, StatusCode, Message, and Headers.
+// Storage and Redis are always taken from globalConfig and cannot be overridden per route.
 func Resolve(globalConfig *models.RateLimitConfig, routeConfig *models.RateLimitConfig) *models.RateLimitConfig {
 	if routeConfig == nil {
 		return globalConfig

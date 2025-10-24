@@ -357,7 +357,9 @@ func (r *RedisRateLimiter) GetLimit(key string) (int64, int64, error) {
 	return r.maxTokens, remaining, nil
 }
 
-// safeConvertToInt64 safely converts a Redis value to int64
+// safeConvertToInt64 converts common Redis-encoded numeric values to int64.
+// It accepts int64, int, int32, float64, decimal strings, and byte slices containing base-10 integers.
+// Returns the converted int64 and true on success, or 0 and false if the input is nil, unsupported, or cannot be parsed.
 func safeConvertToInt64(value interface{}) (int64, bool) {
 	if value == nil {
 		return 0, false
@@ -387,7 +389,10 @@ func safeConvertToInt64(value interface{}) (int64, bool) {
 	}
 }
 
-// safeConvertToBool safely converts a Redis value to bool
+// safeConvertToBool converts various Redis-encoded values to a boolean.
+// It returns the converted boolean and a second boolean indicating whether conversion succeeded.
+// Supported input types: bool, int64/int/int32 (1 => true, other => false), float64 (1.0 => true), string and []byte representing a bool ("true"/"false") or an integer ("1"/"0").
+// If the value is nil or an unsupported type, conversion fails and the second return value is false.
 func safeConvertToBool(value interface{}) (bool, bool) {
 	if value == nil {
 		return false, false
