@@ -166,9 +166,20 @@ func (r *RedisRateLimiter) AllowWithLimit(key string, limit int64, window time.D
 		return false, 0, now.Add(window)
 	}
 
-	allowed := values[0].(int64) == 1
-	remaining := values[1].(int64)
-	resetTimestamp := values[2].(int64)
+	// Safely convert Redis values with defensive type checking
+	allowed, allowedOk := safeConvertToBool(values[0])
+	remaining, remainingOk := safeConvertToInt64(values[1])
+	resetTimestamp, resetOk := safeConvertToInt64(values[2])
+
+	// If any conversion fails, fall back to failOpen behavior
+	if !allowedOk || !remainingOk || !resetOk {
+		r.logger.Error("Failed to convert Redis response values safely")
+		if r.failOpen {
+			return true, limit, now.Add(window)
+		}
+		return false, 0, now.Add(window)
+	}
+
 	resetTime := time.Unix(resetTimestamp, 0)
 
 	if allowed {
@@ -268,9 +279,20 @@ func (r *RedisRateLimiter) AllowN(key string, n int64) (bool, int64, time.Time) 
 		return false, 0, now.Add(r.window)
 	}
 
-	allowed := values[0].(int64) == 1
-	remaining := values[1].(int64)
-	resetTimestamp := values[2].(int64)
+	// Safely convert Redis values with defensive type checking
+	allowed, allowedOk := safeConvertToBool(values[0])
+	remaining, remainingOk := safeConvertToInt64(values[1])
+	resetTimestamp, resetOk := safeConvertToInt64(values[2])
+
+	// If any conversion fails, fall back to failOpen behavior
+	if !allowedOk || !remainingOk || !resetOk {
+		r.logger.Error("Failed to convert Redis response values safely")
+		if r.failOpen {
+			return true, r.maxTokens, now.Add(r.window)
+		}
+		return false, 0, now.Add(r.window)
+	}
+
 	resetTime := time.Unix(resetTimestamp, 0)
 
 	return allowed, remaining, resetTime
@@ -333,6 +355,76 @@ func (r *RedisRateLimiter) GetLimit(key string) (int64, int64, error) {
 	}
 
 	return r.maxTokens, remaining, nil
+}
+
+// safeConvertToInt64 safely converts a Redis value to int64
+func safeConvertToInt64(value interface{}) (int64, bool) {
+	if value == nil {
+		return 0, false
+	}
+
+	switch v := value.(type) {
+	case int64:
+		return v, true
+	case int:
+		return int64(v), true
+	case int32:
+		return int64(v), true
+	case float64:
+		return int64(v), true
+	case string:
+		if parsed, err := strconv.ParseInt(v, 10, 64); err == nil {
+			return parsed, true
+		}
+		return 0, false
+	case []byte:
+		if parsed, err := strconv.ParseInt(string(v), 10, 64); err == nil {
+			return parsed, true
+		}
+		return 0, false
+	default:
+		return 0, false
+	}
+}
+
+// safeConvertToBool safely converts a Redis value to bool
+func safeConvertToBool(value interface{}) (bool, bool) {
+	if value == nil {
+		return false, false
+	}
+
+	switch v := value.(type) {
+	case bool:
+		return v, true
+	case int64:
+		return v == 1, true
+	case int:
+		return v == 1, true
+	case int32:
+		return v == 1, true
+	case float64:
+		return v == 1.0, true
+	case string:
+		if parsed, err := strconv.ParseBool(v); err == nil {
+			return parsed, true
+		}
+		// Also try parsing as int
+		if parsed, err := strconv.ParseInt(v, 10, 64); err == nil {
+			return parsed == 1, true
+		}
+		return false, false
+	case []byte:
+		if parsed, err := strconv.ParseBool(string(v)); err == nil {
+			return parsed, true
+		}
+		// Also try parsing as int
+		if parsed, err := strconv.ParseInt(string(v), 10, 64); err == nil {
+			return parsed == 1, true
+		}
+		return false, false
+	default:
+		return false, false
+	}
 }
 
 // Close closes the Redis connection and stops the health check goroutine

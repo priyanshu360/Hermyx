@@ -5,6 +5,7 @@ import (
 	"hermyx/pkg/models"
 	"hermyx/pkg/ratelimit"
 	"hermyx/pkg/utils/logger"
+	"strings"
 	"sync"
 	"time"
 
@@ -42,6 +43,13 @@ func (rlm *RateLimitManager) Resolve(globalConfig *models.RateLimitConfig, route
 func (rlm *RateLimitManager) Check(ctx *fasthttp.RequestCtx, config *models.RateLimitConfig) *ratelimit.RateLimitResult {
 	if rlm == nil || rlm.limiter == nil || config == nil || !config.Enabled {
 		// Rate limiting is disabled
+		if config != nil && !config.Enabled {
+			rlm.logger.Debug("Rate limiting is disabled for this request")
+		} else if config == nil {
+			rlm.logger.Warn("Rate limiting config is nil, allowing request")
+		} else if rlm.limiter == nil {
+			rlm.logger.Warn("Rate limiter is nil, allowing request")
+		}
 		return &ratelimit.RateLimitResult{
 			Allowed:   true,
 			Remaining: -1,
@@ -50,8 +58,24 @@ func (rlm *RateLimitManager) Check(ctx *fasthttp.RequestCtx, config *models.Rate
 		}
 	}
 
-	key := ratelimit.BuildKey(ctx, config)
+	key := rlm.BuildKey(ctx, config)
+	if key == "" {
+		// Cannot derive a safe key; allow the request to avoid penalizing all traffic
+		rlm.logger.Warn("Cannot derive rate limit key, allowing request to avoid blocking all traffic")
+		return &ratelimit.RateLimitResult{
+			Allowed:   true,
+			Remaining: -1,
+			ResetTime: time.Time{},
+			Limit:     -1,
+		}
+	}
 	allowed, remaining, resetTime := rlm.limiter.AllowWithLimit(key, *config.Requests, *config.Window)
+
+	if allowed {
+		rlm.logger.Debug(fmt.Sprintf("Rate limit check passed for key '%s': %d/%d remaining", key, remaining, *config.Requests))
+	} else {
+		rlm.logger.Warn(fmt.Sprintf("Rate limit exceeded for key '%s': %d/%d remaining, reset at %v", key, remaining, *config.Requests, resetTime))
+	}
 
 	return &ratelimit.RateLimitResult{
 		Allowed:   allowed,
@@ -62,10 +86,78 @@ func (rlm *RateLimitManager) Check(ctx *fasthttp.RequestCtx, config *models.Rate
 	}
 }
 
+// BuildKey builds a rate limit key based on the configuration with warning logs
+func (rlm *RateLimitManager) BuildKey(ctx *fasthttp.RequestCtx, config *models.RateLimitConfig) string {
+	if config == nil || len(config.KeyBy) == 0 {
+		// Default to IP
+		rlm.logger.Debug("Using default IP-based rate limiting")
+		return rlm.getClientIP(ctx)
+	}
+
+	var parts []string
+	for _, keyType := range config.KeyBy {
+		if keyType == "ip" {
+			parts = append(parts, rlm.getClientIP(ctx))
+		} else if strings.HasPrefix(keyType, "header:") {
+			headerName := strings.TrimPrefix(keyType, "header:")
+			headerValue := string(ctx.Request.Header.Peek(headerName))
+			if headerValue != "" {
+				parts = append(parts, headerValue)
+			} else {
+				// Required header missing; fall back to IP to avoid empty key
+				rlm.logger.Warn(fmt.Sprintf("Required header '%s' missing, falling back to IP for rate limiting", headerName))
+				parts = append(parts, rlm.getClientIP(ctx))
+			}
+		} else {
+			// Unknown key type, use as-is
+			rlm.logger.Warn(fmt.Sprintf("Unknown key type '%s', using as-is for rate limiting", keyType))
+			parts = append(parts, keyType)
+		}
+	}
+
+	if len(parts) == 0 {
+		// Fallback to IP if no valid keys
+		rlm.logger.Warn("No valid key parts found, falling back to IP for rate limiting")
+		return rlm.getClientIP(ctx)
+	}
+
+	key := strings.Join(parts, ":")
+	rlm.logger.Debug(fmt.Sprintf("Generated rate limit key: %s", key))
+	return key
+}
+
+// getClientIP extracts the client IP from the request
+func (rlm *RateLimitManager) getClientIP(ctx *fasthttp.RequestCtx) string {
+	// Check X-Forwarded-For header first
+	xff := string(ctx.Request.Header.Peek("X-Forwarded-For"))
+	if xff != "" {
+		// Take the first IP in the list
+		parts := strings.Split(xff, ",")
+		ip := strings.TrimSpace(parts[0])
+		rlm.logger.Debug(fmt.Sprintf("Using X-Forwarded-For IP: %s", ip))
+		return ip
+	}
+
+	// Check X-Real-IP header
+	xri := string(ctx.Request.Header.Peek("X-Real-IP"))
+	if xri != "" {
+		rlm.logger.Debug(fmt.Sprintf("Using X-Real-IP: %s", xri))
+		return xri
+	}
+
+	// Fall back to RemoteAddr
+	ip := ctx.RemoteIP().String()
+	rlm.logger.Debug(fmt.Sprintf("Using RemoteAddr IP: %s", ip))
+	return ip
+}
+
 // Reset resets the rate limit for a specific key
 func (rlm *RateLimitManager) Reset(key string) {
 	if rlm != nil && rlm.limiter != nil {
+		rlm.logger.Debug(fmt.Sprintf("Resetting rate limit for key: %s", key))
 		rlm.limiter.Reset(key)
+	} else {
+		rlm.logger.Warn("Cannot reset rate limit: limiter is nil")
 	}
 }
 
@@ -80,13 +172,13 @@ func (rlm *RateLimitManager) SetHeaders(ctx *fasthttp.RequestCtx, result *rateli
 	}
 
 	if config.Headers.IncludeLimit {
-		ctx.Response.Header.Set("X-Ratelimit-Limit", fmt.Sprintf("%d", result.Limit))
+		ctx.Response.Header.Set("X-RateLimit-Limit", fmt.Sprintf("%d", result.Limit))
 	}
 	if config.Headers.IncludeRemaining {
-		ctx.Response.Header.Set("X-Ratelimit-Remaining", fmt.Sprintf("%d", result.Remaining))
+		ctx.Response.Header.Set("X-RateLimit-Remaining", fmt.Sprintf("%d", result.Remaining))
 	}
 	if config.Headers.IncludeReset {
-		ctx.Response.Header.Set("X-Ratelimit-Reset", fmt.Sprintf("%d", result.ResetTime.Unix()))
+		ctx.Response.Header.Set("X-RateLimit-Reset", fmt.Sprintf("%d", result.ResetTime.Unix()))
 	}
 }
 

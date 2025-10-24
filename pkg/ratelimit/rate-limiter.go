@@ -117,8 +117,8 @@ func BuildKey(ctx *fasthttp.RequestCtx, config *models.RateLimitConfig) string {
 			if headerValue != "" {
 				parts = append(parts, headerValue)
 			} else {
-				// If required header is missing, return empty string
-				return ""
+				// Required header missing; fall back to IP to avoid empty key
+				parts = append(parts, getClientIP(ctx))
 			}
 		} else {
 			// Unknown key type, use as-is
