@@ -90,7 +90,8 @@ func (engine *HermyxEngine) rateLimitMiddleware(next fasthttp.RequestHandler) fa
 		path := string(ctx.Path())
 		method := strings.ToLower(string(ctx.Method()))
 
-		cr, matched := engine.matchRoute(path, method)
+		// Use matchRouteForRateLimit to ensure rate limiting works independently of cache ExcludeMethods
+		cr, matched := engine.matchRouteForRateLimit(path, method)
 		var config *models.RateLimitConfig
 
 		if matched {
@@ -207,6 +208,34 @@ func (engine *HermyxEngine) matchRoute(path, method string) (*compiledRoute, boo
 			}
 		}
 
+		return cr, true
+	}
+	return nil, false
+}
+
+// matchRouteForRateLimit matches routes for rate limiting purposes without considering cache ExcludeMethods
+func (engine *HermyxEngine) matchRouteForRateLimit(path, method string) (*compiledRoute, bool) {
+	for i := range engine.compiledRoutes {
+		cr := &engine.compiledRoutes[i]
+
+		if !cr.PathPattern.MatchString(path) {
+			engine.logger.Debug(fmt.Sprintf("Rate limit route %q skipped: path pattern mismatch for %s", cr.Route.Path, path))
+			continue
+		}
+
+		if cr.IncludeRegex != nil && !cr.IncludeRegex.MatchString(path) {
+			engine.logger.Debug(fmt.Sprintf("Rate limit route %q skipped: include regex does not match path %s", cr.Route.Path, path))
+			continue
+		}
+
+		if cr.ExcludeRegex != nil && cr.ExcludeRegex.MatchString(path) {
+			engine.logger.Debug(fmt.Sprintf("Rate limit route %q skipped: exclude regex matches path %s", cr.Route.Path, path))
+			continue
+		}
+
+		// Note: We intentionally do NOT check ExcludeMethods here
+		// Rate limiting should work independently of cache configuration
+		engine.logger.Debug(fmt.Sprintf("Rate limit route %q matched for %s %s", cr.Route.Path, method, path))
 		return cr, true
 	}
 	return nil, false

@@ -58,6 +58,20 @@ func (m *MemoryRateLimiter) Allow(key string) (bool, int64, time.Time) {
 // AllowWithLimit checks if a request should be allowed for the given key with a specific limit and window
 // Returns: allowed (bool), remaining (int64), resetTime (time.Time)
 func (m *MemoryRateLimiter) AllowWithLimit(key string, limit int64, window time.Duration) (bool, int64, time.Time) {
+	now := time.Now()
+
+	// If limit is 0, immediately block the request
+	if limit <= 0 {
+		m.logger.Debug("Rate limit blocked: limit is 0")
+		return false, 0, now.Add(window)
+	}
+
+	// If window is 0 or negative, block the request to prevent division by zero
+	if window <= 0 {
+		m.logger.Error("Rate limit blocked: window is 0 or negative, preventing division by zero")
+		return false, 0, now.Add(1 * time.Second)
+	}
+
 	m.mu.Lock()
 	bucket, exists := m.buckets[key]
 	if !exists {
@@ -84,9 +98,13 @@ func (m *MemoryRateLimiter) AllowWithLimit(key string, limit int64, window time.
 
 // createBucketWithLimit creates a new token bucket with specific limit and window
 func (m *MemoryRateLimiter) createBucketWithLimit(limit int64, window time.Duration) *TokenBucket {
-	refillRate := int64(float64(limit) / window.Seconds())
-	if refillRate < 1 {
-		refillRate = 1
+	// If window is 0 or negative, use a default refill rate of 1 to prevent division by zero
+	refillRate := int64(1)
+	if window > 0 {
+		refillRate = int64(float64(limit) / window.Seconds())
+		if refillRate < 1 {
+			refillRate = 1
+		}
 	}
 
 	return &TokenBucket{

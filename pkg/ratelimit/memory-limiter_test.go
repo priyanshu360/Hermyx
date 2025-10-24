@@ -942,3 +942,70 @@ func BenchmarkRateLimiter_Concurrent(b *testing.B) {
 		}
 	})
 }
+
+func TestNewMemoryRateLimiter(t *testing.T) {
+	limiter := NewMemoryRateLimiter(100, time.Minute, createTestLogger(t))
+	if limiter == nil {
+		t.Fatal("Limiter should not be nil")
+	}
+	if limiter.maxTokens != 100 {
+		t.Errorf("Expected maxTokens=100, got %d", limiter.maxTokens)
+	}
+	limiter.Close()
+}
+
+func TestNewMemoryRateLimiter_ZeroLimit(t *testing.T) {
+	limiter := NewMemoryRateLimiter(0, time.Minute, createTestLogger(t))
+	defer limiter.Close()
+	allowed, remaining, _ := limiter.Allow("test-key")
+	if allowed {
+		t.Error("Should not allow requests with zero limit")
+	}
+	if remaining != 0 {
+		t.Errorf("Expected remaining=0, got %d", remaining)
+	}
+}
+
+func TestMemoryRateLimiter_Reset_RestoresQuota(t *testing.T) {
+	limiter := NewMemoryRateLimiter(3, time.Minute, createTestLogger(t))
+	defer limiter.Close()
+	limiter.Allow("test-key")
+	limiter.Allow("test-key")
+	limiter.Allow("test-key")
+	allowed, _, _ := limiter.Allow("test-key")
+	if allowed {
+		t.Error("Should be blocked")
+	}
+	limiter.Reset("test-key")
+	allowed, remaining, _ := limiter.Allow("test-key")
+	if !allowed {
+		t.Error("Should be allowed after reset")
+	}
+	if remaining != 2 {
+		t.Errorf("Expected remaining=2 after reset, got %d", remaining)
+	}
+}
+
+func TestMemoryRateLimiter_ConcurrentAccess(t *testing.T) {
+	limiter := NewMemoryRateLimiter(100, time.Minute, createTestLogger(t))
+	defer limiter.Close()
+	var wg sync.WaitGroup
+	successCount := int64(0)
+	var mu sync.Mutex
+	for i := 0; i < 200; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			allowed, _, _ := limiter.Allow("shared-key")
+			if allowed {
+				mu.Lock()
+				successCount++
+				mu.Unlock()
+			}
+		}()
+	}
+	wg.Wait()
+	if successCount != 100 {
+		t.Errorf("Expected exactly 100 successful requests, got %d", successCount)
+	}
+}
