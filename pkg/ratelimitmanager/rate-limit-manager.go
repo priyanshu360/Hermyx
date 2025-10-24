@@ -21,6 +21,8 @@ type RateLimitManager struct {
 	closeOnce    sync.Once
 }
 
+// NewRateLimitManager creates a RateLimitManager configured with the provided limiter and logger.
+// It initializes internal channels and starts periodic health monitoring for the limiter.
 func NewRateLimitManager(limiter ratelimit.IRateLimiter, logger *logger.Logger) *RateLimitManager {
 	manager := &RateLimitManager{
 		limiter:  limiter,

@@ -39,6 +39,10 @@ type HermyxEngine struct {
 	hostClients      map[string]*fasthttp.HostClient
 }
 
+// InstantiateHermyxEngine creates and initializes a HermyxEngine from the YAML configuration file at configPath.
+// It applies sensible defaults for missing configuration, initializes logging, the chosen cache backend and cache manager,
+// the rate limiter and rate limit manager, prepares compiled routes, and returns the initialized engine.
+// On unrecoverable errors during initialization the function logs a fatal message and exits the process.
 func InstantiateHermyxEngine(configPath string) *HermyxEngine {
 	var config models.HermyxConfig
 

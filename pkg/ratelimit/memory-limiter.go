@@ -25,7 +25,12 @@ type MemoryRateLimiter struct {
 	logger    *logger.Logger
 }
 
-// NewMemoryRateLimiter creates a new in-memory rate limiter
+// NewMemoryRateLimiter creates a new MemoryRateLimiter backed by in-memory token buckets.
+// It initializes an empty buckets map, sets the default bucket capacity to maxRequests,
+// uses window as the refill window, sets the cleanup TTL to twice the window, and starts
+// a background goroutine to purge idle buckets.
+// maxRequests is the default maximum tokens per bucket; window is the duration used to compute refill rates;
+// logger is used for internal diagnostic logging.
 func NewMemoryRateLimiter(maxRequests int64, window time.Duration, logger *logger.Logger) *MemoryRateLimiter {
 	// Logger is always provided - no need for nil checks
 	limiter := &MemoryRateLimiter{
