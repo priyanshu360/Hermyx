@@ -4,4 +4,3 @@ hermyx.pid
 /test-configs/*
 hermyx
 *.log
-.gitignore

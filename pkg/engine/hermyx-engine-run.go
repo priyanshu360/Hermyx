@@ -130,7 +130,7 @@ func (engine *HermyxEngine) handleRequest(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	if cr.Route.Cache.KeyConfig == nil {
+	if cr.Route.Cache.Enabled && cr.Route.Cache.KeyConfig == nil {
 		engine.logger.Error("Cache KeyConfig is nil for route " + cr.Route.Path)
 		ctx.Error("Internal Server Error", fasthttp.StatusInternalServerError)
 		return

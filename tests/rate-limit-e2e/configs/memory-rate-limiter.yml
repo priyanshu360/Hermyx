@@ -1,0 +1,219 @@
+# Memory-based Rate Limiter E2E Test Configuration
+# This config tests various rate limiting scenarios using memory storage
+
+server:
+  port: 8080
+
+log:
+  toFile: true
+  toStdout: true
+  prefix: "[hermyx-memory-e2e] "
+  flags: 0
+  debugEnabled: true
+
+storage:
+  path: "./.hermyx"
+
+cache:
+  type: "memory"
+  enabled: false
+  ttl: 30s
+  capacity: 1000
+  maxContentSize: 1048576
+  keyConfig:
+    type: ["path", "method"]
+    excludeMethods: ["POST"]
+    headers:
+      - key: "Accept"
+
+# Global rate limiting configuration
+rateLimit:
+  enabled: true
+  requests: 10             # 10 requests per window (global default)
+  window: 1m               # 1 minute window
+  storage: "memory"        # Use memory storage
+  keyBy: ["ip"]            # Rate limit by IP
+  blockDuration: 5m        # Block for 5 minutes after limit
+  statusCode: 429          # HTTP 429 Too Many Requests
+  message: "Global rate limit exceeded. Only 10 requests per minute allowed."
+  headers:
+    includeRemaining: true
+    includeReset: true
+    includeLimit: true
+
+routes:
+  # Route 1: Strict API - 2 requests per minute
+  - name: "strict-api"
+    path: "^/get"
+    target: "http://localhost:8081"
+    cache:
+      type: "memory"
+      enabled: false
+      ttl: 30s
+      capacity: 1000
+      maxContentSize: 1048576
+      keyConfig:
+        type: ["path", "method"]
+        excludeMethods: ["POST"]
+        headers:
+          - key: "Accept"
+    rateLimit:
+      enabled: true
+      requests: 2           # Override: Only 2 requests per minute
+      window: 1m
+      keyBy: ["ip"]
+      blockDuration: 10m
+      message: "Strict API rate limit exceeded. Only 2 requests per minute allowed."
+
+  # Route 2: Moderate API - 5 requests per 30 seconds
+  - name: "moderate-api"
+    path: "^/json"
+    target: "http://localhost:8081"
+    cache:
+      type: "memory"
+      enabled: false
+      ttl: 30s
+      capacity: 1000
+      maxContentSize: 1048576
+      keyConfig:
+        type: ["path", "method"]
+        excludeMethods: ["POST"]
+        headers:
+          - key: "Accept"
+    rateLimit:
+      enabled: true
+      requests: 5           # Override: 5 requests per 30 seconds
+      window: 30s
+      keyBy: ["ip"]
+      blockDuration: 2m
+      message: "Moderate API rate limit exceeded. Only 5 requests per 30 seconds allowed."
+
+  # Route 3: Header-based API - 3 requests per minute by User-Agent
+  - name: "header-api"
+    path: "^/headers"
+    target: "http://localhost:8081"
+    cache:
+      type: "memory"
+      enabled: false
+      ttl: 30s
+      capacity: 1000
+      maxContentSize: 1048576
+      keyConfig:
+        type: ["path", "method"]
+        excludeMethods: ["POST"]
+        headers:
+          - key: "Accept"
+    rateLimit:
+      enabled: true
+      requests: 3           # Override: 3 requests per minute
+      window: 1m
+      keyBy: ["header:User-Agent"]  # Rate limit by User-Agent header
+      blockDuration: 3m
+      message: "Header API rate limit exceeded. Only 3 requests per minute per User-Agent allowed."
+
+  # Route 4: Combined Keys API - 2 requests per minute by IP + User-Agent
+  - name: "combined-api"
+    path: "^/user-agent"
+    target: "http://localhost:8081"
+    cache:
+      type: "memory"
+      enabled: false
+      ttl: 30s
+      capacity: 1000
+      maxContentSize: 1048576
+      keyConfig:
+        type: ["path", "method"]
+        excludeMethods: ["POST"]
+        headers:
+          - key: "Accept"
+    rateLimit:
+      enabled: true
+      requests: 2           # Override: 2 requests per minute
+      window: 1m
+      keyBy: ["ip", "header:User-Agent"]  # Rate limit by IP + User-Agent
+      blockDuration: 2m
+      message: "Combined API rate limit exceeded. Only 2 requests per minute per IP+User-Agent allowed."
+
+  # Route 5: Burst Protection API - 8 requests per 10 seconds
+  - name: "burst-api"
+    path: "^/ip"
+    target: "http://localhost:8081"
+    cache:
+      type: "memory"
+      enabled: false
+      ttl: 30s
+      capacity: 1000
+      maxContentSize: 1048576
+      keyConfig:
+        type: ["path", "method"]
+        excludeMethods: ["POST"]
+        headers:
+          - key: "Accept"
+    rateLimit:
+      enabled: true
+      requests: 8           # Override: 8 requests per 10 seconds
+      window: 10s
+      keyBy: ["ip"]
+      blockDuration: 1m
+      message: "Burst API rate limit exceeded. Only 8 requests per 10 seconds allowed."
+
+  # Route 6: No Rate Limit API - Inherits global config
+  - name: "global-api"
+    path: "^/uuid"
+    target: "http://localhost:8081"
+    cache:
+      type: "memory"
+      enabled: false
+      ttl: 30s
+      capacity: 1000
+      maxContentSize: 1048576
+      keyConfig:
+        type: ["path", "method"]
+        excludeMethods: ["POST"]
+        headers:
+          - key: "Accept"
+    rateLimit:
+      enabled: true
+      # Inherits global config (10 requests per minute)
+      # requests: 10
+      # window: 1m
+      # keyBy: ["ip"]
+      # blockDuration: 5m
+      # statusCode: 429
+      # message: "Global API rate limit exceeded. Only 10 requests per minute allowed."
+
+  # Route 7: Disabled Rate Limit API
+  - name: "no-limit-api"
+    path: "^/status/200"
+    target: "http://localhost:8081"
+    cache:
+      type: "memory"
+      enabled: false
+      ttl: 30s
+      capacity: 1000
+      maxContentSize: 1048576
+      keyConfig:
+        type: ["path", "method"]
+        excludeMethods: ["POST"]
+        headers:
+          - key: "Accept"
+    rateLimit:
+      enabled: false
+
+  # Health check endpoint (no rate limiting)
+  - name: "health-check"
+    path: "^/health"
+    target: "http://localhost:8081"
+    cache: # Per-route cache overrides (CacheConfig)
+      type: "memory"
+      enabled: true
+      ttl: 120s
+      capacity: 50000
+      maxContentSize: 1048576
+      keyConfig:
+        type: ["path", "query"]
+        excludeMethods: ["POST"]
+        headers:
+          - key: "Accept"
+    rateLimit:
+      enabled: false
