@@ -39,32 +39,60 @@ type RateLimitResult struct {
 }
 
 // NewRateLimiterBackend creates a new rate limiter backend based on global configuration
+// SetDefaults sets default values for any nil pointer fields in the RateLimitConfig
+func SetDefaults(config *models.RateLimitConfig) {
+	if config == nil {
+		return
+	}
+
+	// Set defaults for nil pointer fields
+	if config.Requests == nil {
+		requests := int64(100)
+		config.Requests = &requests
+	}
+	if config.Window == nil {
+		window := time.Minute
+		config.Window = &window
+	}
+	if config.BlockDuration == nil {
+		blockDuration := time.Minute
+		config.BlockDuration = &blockDuration
+	}
+	if config.StatusCode == nil {
+		statusCode := 429
+		config.StatusCode = &statusCode
+	}
+
+	// Set defaults for non-pointer fields
+	if config.Storage == "" {
+		config.Storage = STORAGE_MEMORY
+	}
+	if len(config.KeyBy) == 0 {
+		config.KeyBy = []string{"ip"}
+	}
+	if config.Message == "" {
+		config.Message = "Rate limit exceeded"
+	}
+}
+
 func NewRateLimiter(config *models.RateLimitConfig, logger *logger.Logger) (IRateLimiter, error) {
 	if config == nil || !config.Enabled {
 		return nil, nil
 	}
 
-	// Set defaults only for negative values (invalid)
-	if config.Requests < 0 {
-		config.Requests = 100
-	}
-	if config.Window <= 0 {
-		config.Window = 1 * time.Minute
-	}
-	if config.Storage == "" {
-		config.Storage = STORAGE_MEMORY
-	}
+	// Set defaults before using the config
+	SetDefaults(config)
 
 	var limiter IRateLimiter
 
 	switch strings.ToLower(config.Storage) {
 	case STORAGE_MEMORY:
-		limiter = NewMemoryRateLimiter(config.Requests, config.Window, logger)
+		limiter = NewMemoryRateLimiter(*config.Requests, *config.Window, logger)
 	case STORAGE_REDIS:
 		if config.Redis == nil {
 			return nil, fmt.Errorf("redis configuration required for redis rate limiter")
 		}
-		limiter = NewRedisRateLimiter(config.Redis, config.Requests, config.Window, logger)
+		limiter = NewRedisRateLimiter(config.Redis, *config.Requests, *config.Window, logger)
 	default:
 		return nil, fmt.Errorf("unsupported rate limit storage type: %s", config.Storage)
 	}
@@ -152,19 +180,19 @@ func Resolve(globalConfig *models.RateLimitConfig, routeConfig *models.RateLimit
 	}
 
 	// Inherit from global config if not specified
-	if config.Requests == 0 && globalConfig != nil {
+	if config.Requests == nil && globalConfig != nil && globalConfig.Requests != nil {
 		config.Requests = globalConfig.Requests
 	}
-	if config.Window == 0 && globalConfig != nil {
+	if config.Window == nil && globalConfig != nil && globalConfig.Window != nil {
 		config.Window = globalConfig.Window
 	}
 	if len(config.KeyBy) == 0 && globalConfig != nil {
 		config.KeyBy = globalConfig.KeyBy
 	}
-	if config.BlockDuration == 0 && globalConfig != nil {
+	if config.BlockDuration == nil && globalConfig != nil && globalConfig.BlockDuration != nil {
 		config.BlockDuration = globalConfig.BlockDuration
 	}
-	if config.StatusCode == 0 && globalConfig != nil {
+	if config.StatusCode == nil && globalConfig != nil && globalConfig.StatusCode != nil {
 		config.StatusCode = globalConfig.StatusCode
 	}
 	if config.Message == "" && globalConfig != nil {

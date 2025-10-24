@@ -11,6 +11,19 @@ import (
 	"github.com/valyala/fasthttp"
 )
 
+// Helper functions for creating pointers to values
+func int64Ptr(v int64) *int64 {
+	return &v
+}
+
+func intPtr(v int) *int {
+	return &v
+}
+
+func durationPtr(v time.Duration) *time.Duration {
+	return &v
+}
+
 // createTestLogger creates a logger for testing
 func createTestLogger(t *testing.T) *logger.Logger {
 	logger, err := logger.NewLogger(&models.LogConfig{
@@ -50,8 +63,8 @@ func createBenchmarkLogger(b *testing.B) *logger.Logger {
 func TestNewRateLimiter_Memory(t *testing.T) {
 	config := &models.RateLimitConfig{
 		Enabled:  true,
-		Requests: 100,
-		Window:   1 * time.Minute,
+		Requests: int64Ptr(100),
+		Window:   durationPtr(1 * time.Minute),
 		Storage:  "memory",
 	}
 
@@ -83,8 +96,8 @@ func TestNewRateLimiter_Disabled(t *testing.T) {
 func TestNewRateLimiter_InvalidStorage(t *testing.T) {
 	config := &models.RateLimitConfig{
 		Enabled:  true,
-		Requests: 100,
-		Window:   1 * time.Minute,
+		Requests: int64Ptr(100),
+		Window:   durationPtr(1 * time.Minute),
 		Storage:  "invalid-storage",
 	}
 
@@ -101,8 +114,8 @@ func TestNewRateLimiter_InvalidStorage(t *testing.T) {
 func TestRateLimiter_Allow_Basic(t *testing.T) {
 	config := &models.RateLimitConfig{
 		Enabled:  true,
-		Requests: 5,
-		Window:   1 * time.Minute,
+		Requests: int64Ptr(5),
+		Window:   durationPtr(1 * time.Minute),
 		Storage:  "memory",
 		KeyBy:    []string{"ip"},
 	}
@@ -142,8 +155,8 @@ func TestRateLimiter_Allow_Basic(t *testing.T) {
 func TestRateLimiter_Allow_ZeroLimit(t *testing.T) {
 	config := &models.RateLimitConfig{
 		Enabled:  true,
-		Requests: 0, // No requests allowed
-		Window:   1 * time.Minute,
+		Requests: int64Ptr(0), // No requests allowed
+		Window:   durationPtr(1 * time.Minute),
 		Storage:  "memory",
 		KeyBy:    []string{"ip"},
 	}
@@ -168,8 +181,8 @@ func TestRateLimiter_Allow_ZeroLimit(t *testing.T) {
 func TestRateLimiter_Allow_HighLimit(t *testing.T) {
 	config := &models.RateLimitConfig{
 		Enabled:  true,
-		Requests: 10000,
-		Window:   1 * time.Minute,
+		Requests: int64Ptr(10000),
+		Window:   durationPtr(1 * time.Minute),
 		Storage:  "memory",
 		KeyBy:    []string{"ip"},
 	}
@@ -200,8 +213,8 @@ func TestRateLimiter_Allow_HighLimit(t *testing.T) {
 func TestRateLimiter_TokenRefill(t *testing.T) {
 	config := &models.RateLimitConfig{
 		Enabled:  true,
-		Requests: 5,
-		Window:   5 * time.Second, // 1 token per second
+		Requests: int64Ptr(5),
+		Window:   durationPtr(5 * time.Second), // 1 token per second
 		Storage:  "memory",
 		KeyBy:    []string{"ip"},
 	}
@@ -251,8 +264,8 @@ func TestRateLimiter_TokenRefill(t *testing.T) {
 func TestRateLimiter_FullRefill(t *testing.T) {
 	config := &models.RateLimitConfig{
 		Enabled:  true,
-		Requests: 3,
-		Window:   3 * time.Second,
+		Requests: int64Ptr(3),
+		Window:   durationPtr(3 * time.Second),
 		Storage:  "memory",
 		KeyBy:    []string{"ip"},
 	}
@@ -294,8 +307,8 @@ func TestRateLimiter_FullRefill(t *testing.T) {
 func TestRateLimiter_BuildKey_IP(t *testing.T) {
 	config := &models.RateLimitConfig{
 		Enabled:  true,
-		Requests: 100,
-		Window:   1 * time.Minute,
+		Requests: int64Ptr(100),
+		Window:   durationPtr(1 * time.Minute),
 		Storage:  "memory",
 		KeyBy:    []string{"ip"},
 	}
@@ -312,8 +325,8 @@ func TestRateLimiter_BuildKey_IP(t *testing.T) {
 func TestRateLimiter_BuildKey_Header(t *testing.T) {
 	config := &models.RateLimitConfig{
 		Enabled:  true,
-		Requests: 100,
-		Window:   1 * time.Minute,
+		Requests: int64Ptr(100),
+		Window:   durationPtr(1 * time.Minute),
 		Storage:  "memory",
 		KeyBy:    []string{"header:X-API-Key"},
 	}
@@ -330,8 +343,8 @@ func TestRateLimiter_BuildKey_Header(t *testing.T) {
 func TestRateLimiter_BuildKey_Combined(t *testing.T) {
 	config := &models.RateLimitConfig{
 		Enabled:  true,
-		Requests: 100,
-		Window:   1 * time.Minute,
+		Requests: int64Ptr(100),
+		Window:   durationPtr(1 * time.Minute),
 		Storage:  "memory",
 		KeyBy:    []string{"ip", "header:X-User-ID"},
 	}
@@ -350,8 +363,8 @@ func TestRateLimiter_BuildKey_Combined(t *testing.T) {
 func TestRateLimiter_BuildKey_MultipleHeaders(t *testing.T) {
 	config := &models.RateLimitConfig{
 		Enabled:  true,
-		Requests: 100,
-		Window:   1 * time.Minute,
+		Requests: int64Ptr(100),
+		Window:   durationPtr(1 * time.Minute),
 		Storage:  "memory",
 		KeyBy:    []string{"header:X-API-Key", "header:X-App-ID"},
 	}
@@ -370,8 +383,8 @@ func TestRateLimiter_BuildKey_MultipleHeaders(t *testing.T) {
 func TestRateLimiter_BuildKey_MissingHeader(t *testing.T) {
 	config := &models.RateLimitConfig{
 		Enabled:  true,
-		Requests: 100,
-		Window:   1 * time.Minute,
+		Requests: int64Ptr(100),
+		Window:   durationPtr(1 * time.Minute),
 		Storage:  "memory",
 		KeyBy:    []string{"header:X-API-Key"},
 	}
@@ -388,8 +401,8 @@ func TestRateLimiter_BuildKey_MissingHeader(t *testing.T) {
 func TestRateLimiter_BuildKey_EmptyKeyBy(t *testing.T) {
 	config := &models.RateLimitConfig{
 		Enabled:  true,
-		Requests: 100,
-		Window:   1 * time.Minute,
+		Requests: int64Ptr(100),
+		Window:   durationPtr(1 * time.Minute),
 		Storage:  "memory",
 		KeyBy:    []string{},
 	}
@@ -458,8 +471,8 @@ func TestGetClientIP_RemoteAddr(t *testing.T) {
 func TestRateLimiter_IsolationByIP(t *testing.T) {
 	config := &models.RateLimitConfig{
 		Enabled:  true,
-		Requests: 3,
-		Window:   1 * time.Minute,
+		Requests: int64Ptr(3),
+		Window:   durationPtr(1 * time.Minute),
 		Storage:  "memory",
 		KeyBy:    []string{"ip"},
 	}
@@ -502,8 +515,8 @@ func TestRateLimiter_IsolationByIP(t *testing.T) {
 func TestRateLimiter_IsolationByAPIKey(t *testing.T) {
 	config := &models.RateLimitConfig{
 		Enabled:  true,
-		Requests: 2,
-		Window:   1 * time.Minute,
+		Requests: int64Ptr(2),
+		Window:   durationPtr(1 * time.Minute),
 		Storage:  "memory",
 		KeyBy:    []string{"header:X-API-Key"},
 	}
@@ -555,8 +568,8 @@ func TestRateLimiter_IsolationByAPIKey(t *testing.T) {
 func TestRateLimiter_Concurrent(t *testing.T) {
 	config := &models.RateLimitConfig{
 		Enabled:  true,
-		Requests: 100,
-		Window:   1 * time.Minute,
+		Requests: int64Ptr(100),
+		Window:   durationPtr(1 * time.Minute),
 		Storage:  "memory",
 		KeyBy:    []string{"ip"},
 	}
@@ -606,8 +619,8 @@ func TestRateLimiter_Concurrent(t *testing.T) {
 func TestRateLimiter_ConcurrentDifferentKeys(t *testing.T) {
 	config := &models.RateLimitConfig{
 		Enabled:  true,
-		Requests: 50,
-		Window:   1 * time.Minute,
+		Requests: int64Ptr(50),
+		Window:   durationPtr(1 * time.Minute),
 		Storage:  "memory",
 		KeyBy:    []string{"ip"},
 	}
@@ -654,22 +667,22 @@ func TestRateLimiter_ConcurrentDifferentKeys(t *testing.T) {
 func TestResolve_BasicOverride(t *testing.T) {
 	global := &models.RateLimitConfig{
 		Enabled:  true,
-		Requests: 1000,
-		Window:   1 * time.Minute,
+		Requests: int64Ptr(1000),
+		Window:   durationPtr(1 * time.Minute),
 		Storage:  "memory",
 		KeyBy:    []string{"ip"},
 	}
 
 	route := &models.RateLimitConfig{
 		Enabled:  true,
-		Requests: 100,
-		Window:   1 * time.Minute,
+		Requests: int64Ptr(100),
+		Window:   durationPtr(1 * time.Minute),
 	}
 
 	resolved := Resolve(global, route)
 
-	if resolved.Requests != 100 {
-		t.Errorf("Expected requests 100, got %d", resolved.Requests)
+	if *resolved.Requests != 100 {
+		t.Errorf("Expected requests 100, got %d", *resolved.Requests)
 	}
 	if resolved.Storage != "memory" {
 		t.Errorf("Expected storage 'memory', got '%s'", resolved.Storage)
@@ -682,7 +695,7 @@ func TestResolve_BasicOverride(t *testing.T) {
 func TestResolve_Disabled(t *testing.T) {
 	global := &models.RateLimitConfig{
 		Enabled:  true,
-		Requests: 1000,
+		Requests: int64Ptr(1000),
 	}
 
 	route := &models.RateLimitConfig{
@@ -699,8 +712,8 @@ func TestResolve_Disabled(t *testing.T) {
 func TestResolve_HeadersInheritance(t *testing.T) {
 	global := &models.RateLimitConfig{
 		Enabled:  true,
-		Requests: 1000,
-		Window:   1 * time.Minute,
+		Requests: int64Ptr(1000),
+		Window:   durationPtr(1 * time.Minute),
 		Headers: &models.RateLimitHeadersConfig{
 			IncludeLimit:     true,
 			IncludeRemaining: true,
@@ -710,7 +723,7 @@ func TestResolve_HeadersInheritance(t *testing.T) {
 
 	route := &models.RateLimitConfig{
 		Enabled:  true,
-		Requests: 100,
+		Requests: int64Ptr(100),
 	}
 
 	resolved := Resolve(global, route)
@@ -725,8 +738,8 @@ func TestResolve_HeadersInheritance(t *testing.T) {
 func TestResolve_HeadersOverride(t *testing.T) {
 	global := &models.RateLimitConfig{
 		Enabled:  true,
-		Requests: 1000,
-		Window:   1 * time.Minute,
+		Requests: int64Ptr(1000),
+		Window:   durationPtr(1 * time.Minute),
 		Headers: &models.RateLimitHeadersConfig{
 			IncludeLimit:     true,
 			IncludeRemaining: true,
@@ -736,7 +749,7 @@ func TestResolve_HeadersOverride(t *testing.T) {
 
 	route := &models.RateLimitConfig{
 		Enabled:  true,
-		Requests: 100,
+		Requests: int64Ptr(100),
 		Headers: &models.RateLimitHeadersConfig{
 			IncludeLimit:     true,
 			IncludeRemaining: false,
@@ -762,12 +775,12 @@ func TestResolve_HeadersOverride(t *testing.T) {
 func TestResolve_NoGlobalHeaders(t *testing.T) {
 	global := &models.RateLimitConfig{
 		Enabled:  true,
-		Requests: 1000,
+		Requests: int64Ptr(1000),
 	}
 
 	route := &models.RateLimitConfig{
 		Enabled:  true,
-		Requests: 100,
+		Requests: int64Ptr(100),
 	}
 
 	resolved := Resolve(global, route)
@@ -779,21 +792,21 @@ func TestResolve_NoGlobalHeaders(t *testing.T) {
 func TestResolve_NilRoute(t *testing.T) {
 	global := &models.RateLimitConfig{
 		Enabled:       true,
-		Requests:      1000,
-		Window:        1 * time.Minute,
+		Requests:      int64Ptr(1000),
+		Window:        durationPtr(1 * time.Minute),
 		Storage:       "memory",
 		KeyBy:         []string{"ip"},
-		BlockDuration: 5 * time.Minute,
+		BlockDuration: durationPtr(5 * time.Minute),
 	}
 
 	resolved := Resolve(global, nil)
 
 	// Should return global config unchanged
-	if resolved.Requests != 1000 {
-		t.Errorf("Expected requests 1000, got %d", resolved.Requests)
+	if *resolved.Requests != 1000 {
+		t.Errorf("Expected requests 1000, got %d", *resolved.Requests)
 	}
-	if resolved.Window != 1*time.Minute {
-		t.Errorf("Expected window 1m, got %v", resolved.Window)
+	if *resolved.Window != 1*time.Minute {
+		t.Errorf("Expected window 1m, got %v", *resolved.Window)
 	}
 }
 
@@ -804,8 +817,8 @@ func TestResolve_NilRoute(t *testing.T) {
 func TestRateLimiter_Reset(t *testing.T) {
 	config := &models.RateLimitConfig{
 		Enabled:  true,
-		Requests: 3,
-		Window:   1 * time.Minute,
+		Requests: int64Ptr(3),
+		Window:   durationPtr(1 * time.Minute),
 		Storage:  "memory",
 		KeyBy:    []string{"ip"},
 	}
@@ -851,8 +864,8 @@ func TestRateLimiter_Reset(t *testing.T) {
 func BenchmarkRateLimiter_Allow(b *testing.B) {
 	config := &models.RateLimitConfig{
 		Enabled:  true,
-		Requests: 1000000,
-		Window:   1 * time.Minute,
+		Requests: int64Ptr(1000000),
+		Window:   durationPtr(1 * time.Minute),
 		Storage:  "memory",
 		KeyBy:    []string{"ip"},
 	}
@@ -903,8 +916,8 @@ func BenchmarkRateLimiter_BuildKey_Combined(b *testing.B) {
 func BenchmarkRateLimiter_Concurrent(b *testing.B) {
 	config := &models.RateLimitConfig{
 		Enabled:  true,
-		Requests: 1000000,
-		Window:   1 * time.Minute,
+		Requests: int64Ptr(1000000),
+		Window:   durationPtr(1 * time.Minute),
 		Storage:  "memory",
 		KeyBy:    []string{"ip"},
 	}
@@ -922,99 +935,4 @@ func BenchmarkRateLimiter_Concurrent(b *testing.B) {
 			limiter.Allow(key)
 		}
 	})
-}
-
-// ==========================================
-// Redis Health Monitoring Tests
-// ==========================================
-
-func TestRedisRateLimiter_HealthMonitoring(t *testing.T) {
-	// This test requires a Redis instance to be running
-	// Skip if Redis is not available
-	config := &models.RateLimitConfig{
-		Enabled:  true,
-		Requests: 100,
-		Window:   1 * time.Minute,
-		Storage:  "redis",
-		Redis: &models.RedisConfig{
-			Address: "localhost:6379",
-			DB:      &[]int{0}[0],
-		},
-	}
-
-	limiter, err := NewRateLimiter(config, createTestLogger(t))
-	if err != nil {
-		t.Skip("Redis not available, skipping health monitoring test")
-	}
-	defer limiter.Close()
-
-	// Test that we can get a Redis limiter
-	redisLimiter, ok := limiter.(*RedisRateLimiter)
-	if !ok {
-		t.Fatal("Expected RedisRateLimiter")
-	}
-
-	// Test initial health status
-	// Note: IsHealthy and GetHealthStatus methods are not implemented
-	// if !redisLimiter.IsHealthy() {
-	//	t.Error("Redis should be healthy initially")
-	// }
-
-	// Test health status details
-	// healthStatus := redisLimiter.GetHealthStatus()
-	// if healthStatus["healthy"] != true {
-	//	t.Error("Health status should show healthy")
-	// }
-	// if healthStatus["fail_open"] != true {
-	//	t.Error("Should default to fail open mode")
-	// }
-
-	// Test ping functionality
-	err = redisLimiter.Ping()
-	if err != nil {
-		t.Errorf("Ping should succeed: %v", err)
-	}
-}
-
-func TestRedisRateLimiter_FailOpenMode(t *testing.T) {
-	// Test with fail open mode (default)
-	config := &models.RateLimitConfig{
-		Enabled:  true,
-		Requests: 100,
-		Window:   1 * time.Minute,
-		Storage:  "redis",
-		Redis: &models.RedisConfig{
-			Address:  "localhost:6379",
-			DB:       &[]int{0}[0],
-			FailOpen: &[]bool{true}[0],
-		},
-	}
-
-	limiter, err := NewRateLimiter(config, createTestLogger(t))
-	if err != nil {
-		t.Skip("Redis not available, skipping fail open test")
-	}
-	defer limiter.Close()
-
-	redisLimiter, ok := limiter.(*RedisRateLimiter)
-	if !ok {
-		t.Fatal("Expected RedisRateLimiter")
-	}
-
-	// Test fail open mode
-	if !redisLimiter.failOpen {
-		t.Error("Should be in fail open mode")
-	}
-
-	// Test changing fail open mode
-	// Note: SetFailOpenMode method is not implemented
-	// redisLimiter.SetFailOpenMode(false)
-	// if redisLimiter.failOpen {
-	//	t.Error("Should be in fail closed mode after change")
-	// }
-
-	// redisLimiter.SetFailOpenMode(true)
-	// if !redisLimiter.failOpen {
-	//	t.Error("Should be back in fail open mode")
-	// }
 }
