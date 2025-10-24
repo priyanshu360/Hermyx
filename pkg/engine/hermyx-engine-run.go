@@ -1,8 +1,10 @@
 package engine
 
 import (
-	"context"
 	"fmt"
+	"hermyx/pkg/models"
+	"hermyx/pkg/ratelimit"
+	"math"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -35,6 +37,12 @@ func (engine *HermyxEngine) compileRoutes() {
 		}
 
 		route.Cache = engine.cacheManager.Resolve(engine.config.Cache, route.Cache)
+
+		// Resolve and store rate limit config (same pattern as cache)
+		if engine.rateLimitManager != nil {
+			route.RateLimit = engine.rateLimitManager.Resolve(engine.config.RateLimit, route.RateLimit)
+		}
+
 		engine.compiledRoutes = append(engine.compiledRoutes, cr)
 	}
 }
@@ -43,8 +51,11 @@ func (engine *HermyxEngine) Run() {
 	addr := fmt.Sprintf(":%d", engine.config.Server.Port)
 	engine.logger.Info(fmt.Sprintf("Hermyx engine starting on %s...", addr))
 
+	// Wrap handleRequest with rate limit middleware
+	handler := engine.rateLimitMiddleware(engine.handleRequest)
+
 	server := &fasthttp.Server{
-		Handler:          engine.handleRequest,
+		Handler:          handler,
 		MaxConnsPerIP:    0,
 		DisableKeepalive: false,
 	}
@@ -59,29 +70,49 @@ func (engine *HermyxEngine) Run() {
 		}
 	}()
 
-	err := engine.storePid()
-	if err != nil {
-		engine.logger.Error(fmt.Sprintf("Unable to store program information due to %v", err))
-	}
-
 	<-stop
-
-	engine.logger.Info("Shutdown signal received. Cleaning up...")
-
-	_, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
+	engine.logger.Info("Shutting down server...")
 	if err := server.Shutdown(); err != nil {
-		engine.logger.Error("Error during shutdown: " + err.Error())
+		engine.logger.Error(fmt.Sprintf("Server shutdown error: %v", err))
 	}
-
-	err = engine.cleanup()
-	if err != nil {
-		engine.logger.Error(fmt.Sprintf("Unable to remove program information due to %v", err))
+	if cerr := engine.cleanup(); cerr != nil {
+		engine.logger.Error(fmt.Sprintf("Cleanup error: %v", cerr))
 	}
+}
 
-	engine.logger.Info("Hermyx shut down gracefully.")
-	engine.logger.Close()
+func (engine *HermyxEngine) rateLimitMiddleware(next fasthttp.RequestHandler) fasthttp.RequestHandler {
+	return func(ctx *fasthttp.RequestCtx) {
+		if engine.rateLimitManager == nil {
+			next(ctx)
+			return
+		}
+
+		path := string(ctx.Path())
+		method := strings.ToLower(string(ctx.Method()))
+
+		// Use matchRouteForRateLimit to ensure rate limiting works independently of cache ExcludeMethods
+		cr, matched := engine.matchRouteForRateLimit(path, method)
+		var config *models.RateLimitConfig
+
+		if matched {
+			config = cr.Route.RateLimit
+		} else {
+			config = engine.config.RateLimit
+		}
+
+		result := engine.rateLimitManager.Check(ctx, config)
+		engine.logger.Debug(fmt.Sprintf("Rate limit check: allowed=%v, remaining=%d, limit=%d",
+			result.Allowed, result.Remaining, result.Limit))
+
+		if !result.Allowed {
+			engine.handleRateLimitExceeded(ctx, result, config)
+			return
+		}
+
+		next(ctx)
+		engine.rateLimitManager.SetHeaders(ctx, result, config)
+		engine.logger.Debug("Rate limit headers set")
+	}
 }
 
 func (engine *HermyxEngine) handleRequest(ctx *fasthttp.RequestCtx) {
@@ -99,7 +130,7 @@ func (engine *HermyxEngine) handleRequest(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	if cr.Route.Cache.KeyConfig == nil {
+	if cr.Route.Cache.Enabled && cr.Route.Cache.KeyConfig == nil {
 		engine.logger.Error("Cache KeyConfig is nil for route " + cr.Route.Path)
 		ctx.Error("Internal Server Error", fasthttp.StatusInternalServerError)
 		return
@@ -121,6 +152,31 @@ func (engine *HermyxEngine) handleRequest(ctx *fasthttp.RequestCtx) {
 	}
 
 	engine.cacheResponse(cr, key, ctx)
+}
+
+func (engine *HermyxEngine) handleRateLimitExceeded(ctx *fasthttp.RequestCtx, result *ratelimit.RateLimitResult, config *models.RateLimitConfig) {
+	statusCode := fasthttp.StatusTooManyRequests
+	message := "Rate limit exceeded. Please try again later."
+
+	if config != nil {
+		if config.StatusCode != nil {
+			statusCode = *config.StatusCode
+		}
+		if config.Message != "" {
+			message = config.Message
+		}
+	}
+
+	engine.logger.Warn(fmt.Sprintf("Rate limit exceeded for key: %s", result.Key))
+
+	engine.rateLimitManager.SetHeaders(ctx, result, config)
+
+	// Calculate Retry-After header with ceiling and clamp to zero
+	secs := max(int(math.Ceil(time.Until(result.ResetTime).Seconds())), 0)
+	ctx.Response.Header.Set("Retry-After", fmt.Sprintf("%d", secs))
+
+	ctx.SetStatusCode(statusCode)
+	ctx.SetBodyString(message)
 }
 
 func (engine *HermyxEngine) matchRoute(path, method string) (*compiledRoute, bool) {
@@ -152,6 +208,34 @@ func (engine *HermyxEngine) matchRoute(path, method string) (*compiledRoute, boo
 			}
 		}
 
+		return cr, true
+	}
+	return nil, false
+}
+
+// matchRouteForRateLimit matches routes for rate limiting purposes without considering cache ExcludeMethods
+func (engine *HermyxEngine) matchRouteForRateLimit(path, method string) (*compiledRoute, bool) {
+	for i := range engine.compiledRoutes {
+		cr := &engine.compiledRoutes[i]
+
+		if !cr.PathPattern.MatchString(path) {
+			engine.logger.Debug(fmt.Sprintf("Rate limit route %q skipped: path pattern mismatch for %s", cr.Route.Path, path))
+			continue
+		}
+
+		if cr.IncludeRegex != nil && !cr.IncludeRegex.MatchString(path) {
+			engine.logger.Debug(fmt.Sprintf("Rate limit route %q skipped: include regex does not match path %s", cr.Route.Path, path))
+			continue
+		}
+
+		if cr.ExcludeRegex != nil && cr.ExcludeRegex.MatchString(path) {
+			engine.logger.Debug(fmt.Sprintf("Rate limit route %q skipped: exclude regex matches path %s", cr.Route.Path, path))
+			continue
+		}
+
+		// Note: We intentionally do NOT check ExcludeMethods here
+		// Rate limiting should work independently of cache configuration
+		engine.logger.Debug(fmt.Sprintf("Rate limit route %q matched for %s %s", cr.Route.Path, method, path))
 		return cr, true
 	}
 	return nil, false
@@ -238,16 +322,24 @@ func (engine *HermyxEngine) storePid() error {
 func (engine *HermyxEngine) cleanup() error {
 	var err error = nil
 
+	// Close rate limit manager
+	if engine.rateLimitManager != nil {
+		if closeErr := engine.rateLimitManager.Close(); closeErr != nil {
+			engine.logger.Error(fmt.Sprintf("Failed to close rate limit manager: %v", closeErr))
+		}
+		engine.logger.Info("Rate limit manager closed")
+	}
+
 	err = engine.cacheManager.Close()
 	if err != nil {
-		engine.logger.Error(fmt.Sprintf("Failed to close the cache due to: %w", err))
+		engine.logger.Error(fmt.Sprintf("Failed to close the cache due to: %v", err))
 	}
 	engine.logger.Info("Cache closed")
 
 	pidFile := filepath.Join(engine.config.Storage.Path, "hermyx.pid")
 	err = os.Remove(pidFile)
 	if err != nil {
-		engine.logger.Error(fmt.Sprintf("Failed to remove PID file: %v", err))
+		engine.logger.Error(fmt.Sprintf("Failed to close PID file: %v", err))
 	}
 	engine.logger.Info("PID file removed.")
 	return err

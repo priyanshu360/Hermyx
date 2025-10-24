@@ -1,0 +1,76 @@
+version: "3.8"
+
+services:
+  # Redis service for rate limiting storage
+  redis:
+    image: redis:7-alpine
+    container_name: hermyx-redis
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Mock server for testing
+  mock-server:
+    image: kennethreitz/httpbin:latest
+    container_name: hermyx-mock-server
+    ports:
+      - "8081:80"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/status/200"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Hermyx with Memory Rate Limiter
+  hermyx-memory:
+    build:
+      context: ../../../
+      dockerfile: Dockerfile
+    container_name: hermyx-memory
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./configs/memory-rate-limiter.yml:/app/config.yml:ro
+      - ./logs:/app/logs
+    depends_on:
+      - mock-server
+    restart: unless-stopped
+    command: ["./hermyx", "-config", "/app/config.yml"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Hermyx with Redis Rate Limiter
+  hermyx-redis:
+    build:
+      context: ../../../
+      dockerfile: Dockerfile
+    container_name: hermyx-redis
+    ports:
+      - "8082:8080"
+    volumes:
+      - ./configs/redis-rate-limiter.yml:/app/config.yml:ro
+      - ./logs:/app/logs
+    depends_on:
+      - redis
+      - mock-server
+    restart: unless-stopped
+    command: ["./hermyx", "-config", "/app/config.yml"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+networks:
+  default:
+    name: hermyx-e2e-network
+

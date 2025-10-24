@@ -1,0 +1,311 @@
+package ratelimit
+
+import (
+	"context"
+	"fmt"
+	"hermyx/pkg/models"
+	"hermyx/pkg/utils/logger"
+	"strconv"
+	"time"
+
+	"github.com/redis/go-redis/v9"
+)
+
+// RedisRateLimiter implements distributed rate limiting using Redis
+// It includes configurable fail-open/fail-closed behavior
+// When Redis is unavailable:
+// - failOpen=true (default): Allow requests to proceed (better availability)
+// - failOpen=false: Block all requests (better security)
+type RedisRateLimiter struct {
+	client    *redis.Client
+	namespace string
+	maxTokens int64
+	window    time.Duration
+	ctx       context.Context
+	failOpen  bool // If true, allow requests when Redis is down; if false, block them
+	logger    *logger.Logger
+}
+
+// NewRedisRateLimiter creates a new Redis-based rate limiter
+func NewRedisRateLimiter(config *models.RedisConfig, maxRequests int64, window time.Duration, logger *logger.Logger) *RedisRateLimiter {
+	client := redis.NewClient(&redis.Options{
+		Addr:     config.Address,
+		Password: config.Password,
+		DB: func() int {
+			if config.DB == nil {
+				return 0
+			}
+			return *config.DB
+		}(),
+	})
+
+	namespace := config.KeyNamespace
+	if namespace == "" {
+		namespace = "hermyx:ratelimit:"
+	} else if namespace[len(namespace)-1] != ':' {
+		namespace += ":"
+	}
+
+	// Default to fail open for better availability
+	failOpen := true
+	if config.FailOpen != nil {
+		failOpen = *config.FailOpen
+	}
+
+	return &RedisRateLimiter{
+		client:    client,
+		namespace: namespace,
+		maxTokens: maxRequests,
+		window:    window,
+		ctx:       context.Background(),
+		failOpen:  failOpen,
+		logger:    logger,
+	}
+}
+
+// Allow checks if a request should be allowed for the given key using token bucket algorithm
+// Returns: allowed (bool), remaining (int64), resetTime (time.Time)
+func (r *RedisRateLimiter) Allow(key string) (bool, int64, time.Time) {
+	return r.AllowWithLimit(key, r.maxTokens, r.window)
+}
+
+// AllowWithLimit checks if a request should be allowed for the given key with specific limit and window
+// Returns: allowed (bool), remaining (int64), resetTime (time.Time)
+func (r *RedisRateLimiter) AllowWithLimit(key string, limit int64, window time.Duration) (bool, int64, time.Time) {
+	now := time.Now()
+
+	// If limit is 0, immediately block the request
+	if limit <= 0 {
+		r.logger.Debug("Rate limit blocked: limit is 0")
+		return false, 0, now.Add(window)
+	}
+
+	// If window is 0 or negative, block the request to prevent division by zero
+	if window <= 0 {
+		r.logger.Error("Rate limit blocked: window is 0 or negative, preventing division by zero")
+		return false, 0, now.Add(1 * time.Second)
+	}
+
+	fullKey := r.key(key)
+	nowUnix := now.Unix()
+
+	// Lua script for atomic token bucket implementation
+	// This ensures consistency in a distributed environment
+	script := `
+		local key = KEYS[1]
+		local max_tokens = tonumber(ARGV[1])
+		local refill_rate = tonumber(ARGV[2])
+		local now = tonumber(ARGV[3])
+		local window = tonumber(ARGV[4])
+		
+		-- Get current state
+		local state = redis.call('HMGET', key, 'tokens', 'last_refill')
+		local tokens = tonumber(state[1]) or max_tokens
+		local last_refill = tonumber(state[2]) or now
+		
+		-- Calculate tokens to add based on time elapsed
+		local elapsed = now - last_refill
+		local tokens_to_add = math.floor(elapsed * refill_rate)
+		
+		if tokens_to_add > 0 then
+			tokens = math.min(tokens + tokens_to_add, max_tokens)
+			last_refill = now
+		end
+		
+		-- Try to consume a token
+		local allowed = 0
+		if tokens > 0 then
+			tokens = tokens - 1
+			allowed = 1
+		end
+		
+		-- Update state
+		redis.call('HMSET', key, 'tokens', tokens, 'last_refill', last_refill)
+		redis.call('EXPIRE', key, window * 2)
+		
+		-- Calculate reset time
+		local tokens_needed = max_tokens - tokens
+		local seconds_to_reset = 0
+		if tokens_needed > 0 and refill_rate > 0 then
+			seconds_to_reset = math.ceil(tokens_needed / refill_rate)
+		end
+		
+		return {allowed, tokens, now + seconds_to_reset}
+	`
+
+	refillRate := float64(limit) / window.Seconds()
+	if refillRate < 0.01 {
+		refillRate = 0.01
+	}
+
+	// Use a timeout context for the Redis operation
+	ctx, cancel := context.WithTimeout(r.ctx, 500*time.Millisecond)
+	defer cancel()
+
+	result, err := r.client.Eval(ctx, script, []string{fullKey},
+		limit,
+		refillRate,
+		nowUnix,
+		int64(window.Seconds()),
+	).Result()
+
+	if err != nil {
+		// Redis operation failed, decide based on failOpen setting
+		r.logger.Error("Redis rate limit operation failed: " + err.Error())
+		if r.failOpen {
+			// Fail open: allow the request
+			r.logger.Info("Redis unavailable, failing open - allowing request")
+			return true, limit, now.Add(window)
+		}
+		// Fail closed: block the request
+		r.logger.Info("Redis unavailable, failing closed - blocking request")
+		return false, 0, now.Add(window)
+	}
+
+	values, ok := result.([]interface{})
+	if !ok || len(values) < 3 {
+		// Invalid response, decide based on failOpen setting
+		r.logger.Error("Invalid Redis response format")
+		if r.failOpen {
+			return true, limit, now.Add(window)
+		}
+		return false, 0, now.Add(window)
+	}
+
+	// Safely convert Redis values with defensive type checking
+	allowed, allowedOk := safeConvertToBool(values[0])
+	remaining, remainingOk := safeConvertToInt64(values[1])
+	resetTimestamp, resetOk := safeConvertToInt64(values[2])
+
+	// If any conversion fails, fall back to failOpen behavior
+	if !allowedOk || !remainingOk || !resetOk {
+		r.logger.Error("Failed to convert Redis response values safely")
+		if r.failOpen {
+			return true, limit, now.Add(window)
+		}
+		return false, 0, now.Add(window)
+	}
+
+	resetTime := time.Unix(resetTimestamp, 0)
+
+	if allowed {
+		r.logger.Debug("Rate limit check passed")
+	} else {
+		r.logger.Debug("Rate limit check failed")
+	}
+
+	return allowed, remaining, resetTime
+}
+
+// key generates the full Redis key with namespace
+func (r *RedisRateLimiter) key(k string) string {
+	return fmt.Sprintf("%s%s", r.namespace, k)
+}
+
+// Health checks if the Redis rate limiter is healthy
+func (r *RedisRateLimiter) Health() error {
+	r.logger.Debug("Checking Redis rate limiter health")
+	ctx, cancel := context.WithTimeout(r.ctx, 2*time.Second)
+	defer cancel()
+	err := r.client.Ping(ctx).Err()
+	if err != nil {
+		r.logger.Error("Redis rate limiter health check failed: " + err.Error())
+	}
+	return err
+}
+
+// Reset removes the rate limit entry for a specific key
+func (r *RedisRateLimiter) Reset(key string) {
+	r.logger.Debug("Resetting rate limit for key")
+	ctx, cancel := context.WithTimeout(r.ctx, 1*time.Second)
+	defer cancel()
+	err := r.client.Del(ctx, r.key(key)).Err()
+	if err != nil {
+		r.logger.Error("Failed to reset rate limit key: " + err.Error())
+	}
+}
+
+// safeConvertToInt64 converts common Redis-encoded numeric values to int64.
+// It accepts int64, int, int32, float64, decimal strings, and byte slices containing base-10 integers.
+// Returns the converted int64 and true on success, or 0 and false if the input is nil, unsupported, or cannot be parsed.
+func safeConvertToInt64(value interface{}) (int64, bool) {
+	if value == nil {
+		return 0, false
+	}
+
+	switch v := value.(type) {
+	case int64:
+		return v, true
+	case int:
+		return int64(v), true
+	case int32:
+		return int64(v), true
+	case float64:
+		return int64(v), true
+	case string:
+		if parsed, err := strconv.ParseInt(v, 10, 64); err == nil {
+			return parsed, true
+		}
+		return 0, false
+	case []byte:
+		if parsed, err := strconv.ParseInt(string(v), 10, 64); err == nil {
+			return parsed, true
+		}
+		return 0, false
+	default:
+		return 0, false
+	}
+}
+
+// safeConvertToBool converts various Redis-encoded values to a boolean.
+// It returns the converted boolean and a second boolean indicating whether conversion succeeded.
+// Supported input types: bool, int64/int/int32 (1 => true, other => false), float64 (1.0 => true), string and []byte representing a bool ("true"/"false") or an integer ("1"/"0").
+// If the value is nil or an unsupported type, conversion fails and the second return value is false.
+func safeConvertToBool(value interface{}) (bool, bool) {
+	if value == nil {
+		return false, false
+	}
+
+	switch v := value.(type) {
+	case bool:
+		return v, true
+	case int64:
+		return v == 1, true
+	case int:
+		return v == 1, true
+	case int32:
+		return v == 1, true
+	case float64:
+		return v == 1.0, true
+	case string:
+		if parsed, err := strconv.ParseBool(v); err == nil {
+			return parsed, true
+		}
+		// Also try parsing as int
+		if parsed, err := strconv.ParseInt(v, 10, 64); err == nil {
+			return parsed == 1, true
+		}
+		return false, false
+	case []byte:
+		if parsed, err := strconv.ParseBool(string(v)); err == nil {
+			return parsed, true
+		}
+		// Also try parsing as int
+		if parsed, err := strconv.ParseInt(string(v), 10, 64); err == nil {
+			return parsed == 1, true
+		}
+		return false, false
+	default:
+		return false, false
+	}
+}
+
+// Close closes the Redis client/connection; it does not manage any goroutines
+func (r *RedisRateLimiter) Close() error {
+	r.logger.Debug("Closing Redis rate limiter")
+	err := r.client.Close()
+	if err != nil {
+		r.logger.Error("Failed to close Redis client: " + err.Error())
+	}
+	return err
+}
