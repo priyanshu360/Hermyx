@@ -47,6 +47,8 @@ We have issues labeled **`good first issue`**, **`help wanted`**, and **`hacktob
 * 🧠 **Pluggable Caching Backends**: Choose between in-memory, disk-based, or Redis caching.
 * ⏱ **TTL & Capacity Management**: Fine-grained control over cache expiry and size limits.
 * 😑 **Custom Cache Keys**: Use `path`, `method`, `query`, and request `headers` to build smart cache keys.
+* 🚦 **Advanced Rate Limiting**: Protect your APIs with configurable rate limits, burst protection, and custom blocking strategies.
+* 🎛️ **Flexible Rate Limit Keys**: Rate limit by IP, headers, or custom combinations for fine-grained control.
 * 🩵 **Flexible Logging**: Log to file and/or stdout with custom formats and prefixes.
 * ✨ **Zero-Hassle YAML Config**: Simple, clean, and declarative.
 * 🧹 **Graceful Shutdown**: Includes PID file management and safe cleanup.
@@ -273,6 +275,163 @@ Hermyx supports multiple caching backends. Choose one depending on your use case
 | Field | Type   | Description            |
 | ----- | ------ | ---------------------- |
 | `key` | string | Header name to include |
+
+---
+
+## 🚦 Rate Limiting
+
+Hermyx includes powerful rate limiting capabilities to protect your APIs from abuse and ensure fair usage.
+
+### Key Features
+
+* **Global & Per-Route Configuration**: Set global defaults and override per route
+* **Flexible Storage Backends**: Memory (single-instance) or Redis (distributed)
+* **Custom Rate Limit Keys**: Rate limit by IP, headers, or combinations
+* **Burst Protection**: Short windows for burst detection
+* **Smart Defaults**: Sensible defaults for all configuration options
+
+### Quick Start
+
+Enable rate limiting with minimal configuration:
+
+```yaml
+rateLimit:
+  enabled: true
+  # All other values use sensible defaults:
+  # - requests: 100, window: 1m, storage: "memory", keyBy: ["ip"]
+```
+
+### Configuration Options
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `enabled` | boolean | `false` | Enable/disable rate limiting |
+| `requests` | integer | `100` | Max requests per window |
+| `window` | duration | `1m` | Time window (e.g., `1m`, `5s`, `1h`) |
+| `storage` | string | `"memory"` | Storage backend (`memory` or `redis`) |
+| `keyBy` | array | `["ip"]` | Rate limit key strategy |
+| `blockDuration` | duration | `1m` | How long to block after limit exceeded |
+| `statusCode` | integer | `429` | HTTP status code when rate limited |
+| `message` | string | `"Rate limit exceeded"` | Error message |
+
+### Rate Limit Key Strategies
+
+```yaml
+# Rate limit by IP address (default)
+keyBy: ["ip"]
+
+# Rate limit by API key
+keyBy: ["header:Authorization"]
+
+# Rate limit by custom header
+keyBy: ["header:X-API-Key"]
+
+# Rate limit by IP + user combination
+keyBy: ["ip", "header:X-User-ID"]
+
+# Rate limit by webhook secret
+keyBy: ["header:X-Webhook-Secret"]
+```
+
+### Storage Backends
+
+**Memory Storage** (default):
+```yaml
+rateLimit:
+  enabled: true
+  storage: "memory"
+  # No additional configuration needed
+```
+
+**Redis Storage** (for distributed systems):
+```yaml
+rateLimit:
+  enabled: true
+  storage: "redis"
+  redis:
+    address: "redis:6379"
+    password: "${REDIS_PASSWORD}"
+    db: 0
+    namespace: "hermyx:ratelimit:"
+    failOpen: true  # Allow requests when Redis is down
+```
+
+### Per-Route Overrides
+
+Routes can override global rate limit settings:
+
+```yaml
+routes:
+  - name: "api"
+    path: "^/api"
+    target: "localhost:3000"
+    rateLimit:
+      enabled: true
+      requests: 1000        # Override: higher limit
+      window: 1h           # Override: hourly window
+      keyBy: ["header:Authorization"]  # Override: per-user limiting
+      blockDuration: 30m   # Override: longer block time
+```
+
+### Common Use Cases
+
+**Public API Protection**:
+```yaml
+rateLimit:
+  enabled: true
+  requests: 100
+  window: 1m
+  keyBy: ["ip"]
+```
+
+**Authenticated API**:
+```yaml
+rateLimit:
+  enabled: true
+  requests: 1000
+  window: 1h
+  keyBy: ["header:Authorization"]
+```
+
+**Login Protection**:
+```yaml
+rateLimit:
+  enabled: true
+  requests: 5
+  window: 15m
+  keyBy: ["ip"]
+  blockDuration: 1h
+```
+
+**File Upload Protection**:
+```yaml
+rateLimit:
+  enabled: true
+  requests: 10
+  window: 1h
+  keyBy: ["header:Authorization"]
+```
+
+### Rate Limit Headers
+
+Hermyx automatically adds standard rate limit headers:
+
+* `X-RateLimit-Limit`: Maximum requests allowed
+* `X-RateLimit-Remaining`: Requests remaining in current window
+* `X-RateLimit-Reset`: Time when the rate limit resets
+* `Retry-After`: Seconds to wait before retrying
+
+### Default Values
+
+When you omit configuration fields, Hermyx applies these sensible defaults:
+
+- **Rate limiting is disabled by default** (`enabled: false`)
+- **100 requests per minute** (`requests: 100`, `window: 1m`)
+- **Memory storage** (`storage: "memory"`) - no external dependencies
+- **IP-based limiting** (`keyBy: ["ip"]`) - most common use case
+- **1-minute block duration** (`blockDuration: 1m`)
+- **HTTP 429 status** (`statusCode: 429`)
+- **Clear error message** (`message: "Rate limit exceeded"`)
 
 ---
 

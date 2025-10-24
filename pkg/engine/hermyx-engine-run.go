@@ -92,19 +92,12 @@ func (engine *HermyxEngine) rateLimitMiddleware(next fasthttp.RequestHandler) fa
 		cr, matched := engine.matchRoute(path, method)
 		var config *models.RateLimitConfig
 
-		if matched && cr.Route.RateLimit != nil && cr.Route.RateLimit.Enabled {
+		if matched {
 			config = cr.Route.RateLimit
-		} else if engine.config.RateLimit != nil && engine.config.RateLimit.Enabled {
+		} else {
 			config = engine.config.RateLimit
 		}
 
-		// If no rate limit config, just continue
-		if config == nil {
-			next(ctx)
-			return
-		}
-
-		// Check rate limit
 		result := engine.rateLimitManager.Check(ctx, config)
 		engine.logger.Debug(fmt.Sprintf("Rate limit check: allowed=%v, remaining=%d, limit=%d",
 			result.Allowed, result.Remaining, result.Limit))
@@ -164,8 +157,8 @@ func (engine *HermyxEngine) handleRateLimitExceeded(ctx *fasthttp.RequestCtx, re
 	message := "Rate limit exceeded. Please try again later."
 
 	if config != nil {
-		if config.StatusCode > 0 {
-			statusCode = config.StatusCode
+		if config.StatusCode != nil {
+			statusCode = *config.StatusCode
 		}
 		if config.Message != "" {
 			message = config.Message

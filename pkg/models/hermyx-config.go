@@ -63,12 +63,12 @@ type StorageConfig struct {
 
 type RateLimitConfig struct {
 	Enabled       bool                    `yaml:"enabled"`
-	Requests      int64                   `yaml:"requests"`
-	Window        time.Duration           `yaml:"window"`
+	Requests      *int64                  `yaml:"requests"`
+	Window        *time.Duration          `yaml:"window"`
 	Storage       string                  `yaml:"storage"`
 	KeyBy         []string                `yaml:"keyBy"`
-	BlockDuration time.Duration           `yaml:"blockDuration"`
-	StatusCode    int                     `yaml:"statusCode"`
+	BlockDuration *time.Duration          `yaml:"blockDuration"`
+	StatusCode    *int                    `yaml:"statusCode"`
 	Message       string                  `yaml:"message"`
 	Redis         *RedisConfig            `yaml:"redis"`
 	Headers       *RateLimitHeadersConfig `yaml:"headers"`

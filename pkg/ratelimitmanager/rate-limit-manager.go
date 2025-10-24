@@ -51,13 +51,13 @@ func (rlm *RateLimitManager) Check(ctx *fasthttp.RequestCtx, config *models.Rate
 	}
 
 	key := ratelimit.BuildKey(ctx, config)
-	allowed, remaining, resetTime := rlm.limiter.AllowWithLimit(key, config.Requests, config.Window)
+	allowed, remaining, resetTime := rlm.limiter.AllowWithLimit(key, *config.Requests, *config.Window)
 
 	return &ratelimit.RateLimitResult{
 		Allowed:   allowed,
 		Remaining: remaining,
 		ResetTime: resetTime,
-		Limit:     config.Requests,
+		Limit:     *config.Requests,
 		Key:       key,
 	}
 }

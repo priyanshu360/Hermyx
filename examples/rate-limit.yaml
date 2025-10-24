@@ -42,6 +42,18 @@ cache:
 # ==========================================
 # IMPORTANT: Storage backend is set globally and applies to ALL routes.
 # Individual routes can override limits, windows, keys, etc. but NOT storage.
+#
+# DEFAULT VALUES (applied when fields are missing):
+# - enabled: false            # Rate limiting disabled by default
+# - requests: 100             # 100 requests per window
+# - window: 1m                # 1 minute window
+# - storage: "memory"         # Memory storage (no external dependencies)
+# - keyBy: ["ip"]             # Rate limit by IP address
+# - blockDuration: 1m         # Block for 1 minute after limit exceeded
+# - statusCode: 429           # HTTP 429 "Too Many Requests"
+# - message: "Rate limit exceeded"  # Default error message
+#
+# You can omit any of these fields and defaults will be applied automatically.
 rateLimit:
   enabled: true
   requests: 1000              # Max requests per window
@@ -66,6 +78,29 @@ rateLimit:
     includeRemaining: true    # Add X-RateLimit-Remaining header
     includeReset: true        # Add X-RateLimit-Reset header
     includeLimit: true        # Add X-RateLimit-Limit header
+
+# ==========================================
+# MINIMAL CONFIGURATION EXAMPLES
+# ==========================================
+# These examples show how defaults work:
+
+# Minimal config - only enable rate limiting (all other values use defaults):
+# rateLimit:
+#   enabled: true
+#   # All other fields will use defaults:
+#   # - requests: 100, window: 1m, storage: "memory", keyBy: ["ip"], etc.
+
+# Custom requests only - everything else uses defaults:
+# rateLimit:
+#   enabled: true
+#   requests: 500
+#   # window: 1m (default), storage: "memory" (default), keyBy: ["ip"] (default)
+
+# Custom window only - everything else uses defaults:
+# rateLimit:
+#   enabled: true
+#   window: 5m
+#   # requests: 100 (default), storage: "memory" (default), keyBy: ["ip"] (default)
 
 # ==========================================
 # ALTERNATIVE STORAGE CONFIGURATIONS
