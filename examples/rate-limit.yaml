@@ -1,0 +1,341 @@
+# ==========================================
+# LOGGING CONFIGURATION
+# ==========================================
+log:
+  toFile: true
+  filePath: "./hermyx.log"
+  toStdout: true
+  prefix: "[Hermyx]"
+  flags: 0
+  debugEnabled: true
+
+# ==========================================
+# SERVER CONFIGURATION
+# ==========================================
+server:
+  port: 8080
+
+# ==========================================
+# STORAGE CONFIGURATION
+# ==========================================
+storage:
+  path: "./.hermyx"
+
+# ==========================================
+# CACHE CONFIGURATION
+# ==========================================
+cache:
+  type: "memory"              # memory|disk|redis
+  enabled: true               # Master toggle for caching
+  ttl: 300s                   # Default TTL for cached entries
+  capacity: 200000            # Max number of entries (approx; app-defined)
+  maxContentSize: 1048576     # Max item size in bytes (1MB)
+  keyConfig:                  # Cache key construction
+    type: ["path", "method", "query", "header"]
+    excludeMethods: ["POST", "PUT", "DELETE"]
+    headers:
+      - key: "Accept"
+      - key: "Accept-Encoding"
+
+# ==========================================
+# GLOBAL RATE LIMITING CONFIGURATION
+# ==========================================
+# IMPORTANT: Storage backend is set globally and applies to ALL routes.
+# Individual routes can override limits, windows, keys, etc. but NOT storage.
+#
+# DEFAULT VALUES (applied when fields are missing):
+# - enabled: false            # Rate limiting disabled by default
+# - requests: 100             # 100 requests per window
+# - window: 1m                # 1 minute window
+# - storage: "memory"         # Memory storage (no external dependencies)
+# - keyBy: ["ip"]             # Rate limit by IP address
+# - blockDuration: 1m         # Block for 1 minute after limit exceeded
+# - statusCode: 429           # HTTP 429 "Too Many Requests"
+# - message: "Rate limit exceeded"  # Default error message
+#
+# You can omit any of these fields and defaults will be applied automatically.
+rateLimit:
+  enabled: true
+  requests: 1000              # Max requests per window
+  window: 1m                  # Time window (supports: s, m, h)
+  storage: "memory"            # Storage backend: "memory" or "redis" (GLOBAL - cannot be overridden per route)
+  keyBy: ["ip"]               # Default rate limit key strategy
+  blockDuration: 5m           # How long to block after limit exceeded
+  statusCode: 429             # HTTP status code to return when rate limited
+  message: "Rate limit exceeded. Please try again later."
+  
+  # Redis configuration (required when storage="redis")
+  # redis:
+  #   address: "0.0.0.0:6379"
+  #   password: ""
+  #   db: 0
+  #   defaultTtl: 10s
+  #   namespace: "hermyx:"
+  #   failOpen: true              # Allow requests when Redis is down (default: true)
+  #
+  # Default headers for rate limit responses
+  headers:
+    includeRemaining: true    # Add X-RateLimit-Remaining header
+    includeReset: true        # Add X-RateLimit-Reset header
+    includeLimit: true        # Add X-RateLimit-Limit header
+
+# ==========================================
+# MINIMAL CONFIGURATION EXAMPLES
+# ==========================================
+# These examples show how defaults work:
+
+# Minimal config - only enable rate limiting (all other values use defaults):
+# rateLimit:
+#   enabled: true
+#   # All other fields will use defaults:
+#   # - requests: 100, window: 1m, storage: "memory", keyBy: ["ip"], etc.
+
+# Custom requests only - everything else uses defaults:
+# rateLimit:
+#   enabled: true
+#   requests: 500
+#   # window: 1m (default), storage: "memory" (default), keyBy: ["ip"] (default)
+
+# Custom window only - everything else uses defaults:
+# rateLimit:
+#   enabled: true
+#   window: 5m
+#   # requests: 100 (default), storage: "memory" (default), keyBy: ["ip"] (default)
+
+# ==========================================
+# ALTERNATIVE STORAGE CONFIGURATIONS
+# ==========================================
+# Choose ONE storage backend for your deployment:
+
+# Option 1: Memory Storage (Simple, single-instance only)
+# rateLimit:
+#   storage: "memory"
+#   # No redis config needed
+
+# Option 2: Redis Storage (Production, distributed systems)
+# rateLimit:
+#   storage: "redis"
+#   redis:
+#     address: "redis:6379"
+#     password: "${REDIS_PASSWORD}"
+#     db: 0
+#     defaultTtl: 10s
+#     namespace: "hermyx:ratelimit:"
+#     failOpen: true              # Allow requests when Redis is down (default: true)
+
+# ==========================================
+# ROUTES CONFIGURATION
+# ==========================================
+# Routes can override: requests, window, keyBy, blockDuration, message, headers
+# Routes CANNOT override: storage (always uses global setting)
+routes:
+  # Example 1: User API with authentication-based rate limiting
+  - name: "user-api"
+    path: "^/api/users"
+    target: "localhost:3000"
+    include: [".*"]
+    exclude: ["^/api/users/private"]
+    cache:
+      enabled: true
+      ttl: 2m
+      keyConfig:
+        type: ["path", "query", "header"]
+        headers:
+          - key: "Authorization"
+        excludeMethods: ["post"]
+    rateLimit:
+      enabled: true
+      requests: 1           # Override: stricter limit
+      window: 1m
+      keyBy: ["ip"]  
+      blockDuration: 10m      # Override: longer block
+      message: "User API rate limit exceeded"
+      # Note: Uses global Redis storage, cannot override here
+
+  # Example 2: Public endpoint with stricter limits
+  - name: "public-api"
+    path: "^/api/public"
+    target: "localhost:3000"
+    rateLimit:
+      enabled: true
+      requests: 50            # Override: lower limit for public
+      window: 1m
+      keyBy: ["ip"]           # Override: IP-based only
+      blockDuration: 15m
+
+  # Example 3: High-performance metrics endpoint
+  - name: "metrics-api"
+    path: "^/api/metrics"
+    target: "localhost:3000"
+    rateLimit:
+      enabled: true
+      requests: 10000         # Override: very high limit
+      window: 1m
+      keyBy: ["ip"]
+
+  # Example 4: Premium API with API key-based limiting
+  - name: "premium-api"
+    path: "^/api/premium"
+    target: "localhost:3000"
+    rateLimit:
+      enabled: true
+      requests: 5000          # Override: higher limit for premium
+      window: 1m
+      keyBy: ["header:X-API-Key"]  # Override: API key-based
+      blockDuration: 1m
+
+  # Example 5: Internal services with no rate limiting
+  - name: "internal-api"
+    path: "^/api/internal"
+    target: "localhost:3000"
+    rateLimit:
+      enabled: false          # Override: disable completely
+
+  # Example 6: Custom headers configuration
+  - name: "custom-headers-api"
+    path: "^/api/custom"
+    target: "localhost:3000"
+    rateLimit:
+      enabled: true
+      requests: 100
+      window: 1m
+      headers:
+        includeLimit: true
+        includeReset: true
+        includeRemaining: false  # Override: hide remaining count
+
+  # Example 7: Login endpoint with strict burst protection
+  - name: "login-api"
+    path: "^/api/auth/login"
+    target: "localhost:3000"
+    rateLimit:
+      enabled: true
+      requests: 5             # Override: only 5 login attempts
+      window: 15m             # Override: per 15 minutes
+      keyBy: ["ip"]
+      blockDuration: 1h       # Override: block for 1 hour
+      message: "Too many login attempts. Please try again later."
+
+  # Example 8: File upload endpoint with strict limits
+  - name: "upload-api"
+    path: "^/api/upload"
+    target: "localhost:3000"
+    rateLimit:
+      enabled: true
+      requests: 10            # Override: 10 uploads
+      window: 1h              # Override: per hour
+      keyBy: ["header:Authorization"]  # Override: per user
+      blockDuration: 30m
+      message: "Upload limit exceeded. Please try again later."
+
+  # Example 9: Webhook endpoint with combined key limiting
+  - name: "webhook-api"
+    path: "^/api/webhooks"
+    target: "localhost:3000"
+    rateLimit:
+      enabled: true
+      requests: 100
+      window: 5m
+      keyBy: ["ip", "header:X-Webhook-ID"]  # Override: both IP and webhook ID
+      blockDuration: 10m
+
+  # Example 10: Search API with short burst window
+  - name: "search-api"
+    path: "^/api/search"
+    target: "localhost:3000"
+    rateLimit:
+      enabled: true
+      requests: 20            # Override: 20 searches
+      window: 10s             # Override: in 10 seconds (burst protection)
+      keyBy: ["ip"]
+      blockDuration: 1m
+      message: "Search rate limit exceeded. Please slow down."
+
+  # Example 11: Health check endpoint (no rate limiting)
+  - name: "health-check"
+    path: "^/health"
+    target: "localhost:3000"
+    rateLimit:
+      enabled: false          # No rate limiting on health checks
+
+  # Example 12: Password reset with very strict limits
+  - name: "password-reset-api"
+    path: "^/api/auth/reset-password"
+    target: "localhost:3000"
+    rateLimit:
+      enabled: true
+      requests: 3             # Override: only 3 attempts
+      window: 1h              # Override: per hour
+      keyBy: ["ip"]
+      blockDuration: 24h      # Override: block for 24 hours
+      message: "Too many password reset attempts. Please contact support."
+
+# ==========================================
+# RATE LIMITING INHERITANCE RULES
+# ==========================================
+# When a route specifies rateLimit config:
+# 
+# ALWAYS INHERITED FROM GLOBAL:
+# - storage                 (cannot be overridden)
+# - redis                   (cannot be overridden)
+#
+# CAN BE OVERRIDDEN PER ROUTE:
+# - enabled                 (can disable for specific routes)
+# - requests                (different limits per route)
+# - window                  (different time windows)
+# - keyBy                   (different rate limit keys)
+# - blockDuration           (different block times)
+# - statusCode              (different HTTP status codes)
+# - message                 (custom error messages)
+# - headers                 (custom header configuration)
+#
+# IF NOT SPECIFIED IN ROUTE:
+# - Inherits the global value
+
+# ==========================================
+# DEPLOYMENT RECOMMENDATIONS
+# ==========================================
+# 
+# SINGLE INSTANCE / DEVELOPMENT:
+#   storage: "memory"
+#   - Simplest setup, no external dependencies
+#   - Fast performance
+#   - Rate limits reset on restart
+#
+# PRODUCTION / DISTRIBUTED SYSTEMS:
+#   storage: "redis"
+#   - Consistent rate limiting across instances
+#   - Survives application restarts
+#   - Required for horizontal scaling
+#   - Slightly higher latency (usually <1ms)
+#
+# PERFORMANCE CONSIDERATIONS:
+#   - Memory: ~10-50 microseconds per check
+#   - Redis: ~1-5 milliseconds per check
+#   - For 99.9% of use cases, the difference is negligible
+#   - Don't prematurely optimize with memory storage
+
+# ==========================================
+# COMMON USE CASE EXAMPLES
+# ==========================================
+#
+# PUBLIC REST API:
+#   requests: 100, window: 1m, keyBy: ["ip"]
+#
+# AUTHENTICATED API:
+#   requests: 1000, window: 1h, keyBy: ["header:Authorization"]
+#
+# API WITH TIERED ACCESS:
+#   requests: 10000, window: 1h, keyBy: ["header:X-API-Key"]
+#
+# LOGIN/AUTH ENDPOINT:
+#   requests: 5, window: 15m, keyBy: ["ip"], blockDuration: 1h
+#
+# FILE UPLOAD:
+#   requests: 10, window: 1h, keyBy: ["header:Authorization"]
+#
+# WEBHOOK RECEIVER:
+#   requests: 100, window: 5m, keyBy: ["ip", "header:X-Webhook-Secret"]
+#
+# INTERNAL SERVICE (NO LIMIT):
+#   enabled: false

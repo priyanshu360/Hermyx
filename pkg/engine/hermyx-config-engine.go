@@ -5,6 +5,8 @@ import (
 	"hermyx/pkg/cache"
 	"hermyx/pkg/cachemanager"
 	"hermyx/pkg/models"
+	"hermyx/pkg/ratelimit"
+	"hermyx/pkg/ratelimitmanager"
 	"hermyx/pkg/utils/fs"
 	"hermyx/pkg/utils/hash"
 	"hermyx/pkg/utils/logger"
@@ -27,15 +29,20 @@ type compiledRoute struct {
 }
 
 type HermyxEngine struct {
-	config         *models.HermyxConfig
-	logger         *logger.Logger
-	cacheManager   *cachemanager.CacheManager
-	compiledRoutes []compiledRoute
-	configPath     string
-	pid            uint64
-	hostClients    map[string]*fasthttp.HostClient
+	config           *models.HermyxConfig
+	logger           *logger.Logger
+	cacheManager     *cachemanager.CacheManager
+	rateLimitManager *ratelimitmanager.RateLimitManager
+	compiledRoutes   []compiledRoute
+	configPath       string
+	pid              uint64
+	hostClients      map[string]*fasthttp.HostClient
 }
 
+// InstantiateHermyxEngine creates and initializes a HermyxEngine from the YAML configuration file at configPath.
+// It applies sensible defaults for missing configuration, initializes logging, the chosen cache backend and cache manager,
+// the rate limiter and rate limit manager, prepares compiled routes, and returns the initialized engine.
+// On unrecoverable errors during initialization the function logs a fatal message and exits the process.
 func InstantiateHermyxEngine(configPath string) *HermyxEngine {
 	var config models.HermyxConfig
 
@@ -99,7 +106,7 @@ func InstantiateHermyxEngine(configPath string) *HermyxEngine {
 		storageDir := filepath.Join(programDataDir, hash.HashString(absConfigPath))
 		logger_.Info(fmt.Sprintf("Assigning storage path as %s", storageDir))
 
-		config.Storage = &models.StorageConfig{storageDir}
+		config.Storage = &models.StorageConfig{Path: storageDir}
 	}
 	if config.Routes == nil {
 		config.Routes = []models.RouteConfig{}
@@ -135,13 +142,27 @@ func InstantiateHermyxEngine(configPath string) *HermyxEngine {
 
 	cacheManager := cachemanager.NewCacheManager(cache_)
 
+	if config.RateLimit == nil {
+		config.RateLimit = &models.RateLimitConfig{
+			Enabled: false,
+		}
+	}
+	ratelimit.SetDefaults(config.RateLimit)
+	rateLimiter, err := ratelimit.NewRateLimiter(config.RateLimit, logger_)
+	if err != nil {
+		log.Fatalf("Failed to initialize rate limiter : %v", err)
+	}
+	rateLimitManager := ratelimitmanager.NewRateLimitManager(rateLimiter, logger_)
+	logger_.Info("Rate limit manager initialized")
+
 	engine := &HermyxEngine{
-		config:       &config,
-		logger:       logger_,
-		cacheManager: cacheManager,
-		configPath:   configPath,
-		pid:          uint64(os.Getpid()),
-		hostClients:  make(map[string]*fasthttp.HostClient),
+		config:           &config,
+		logger:           logger_,
+		cacheManager:     cacheManager,
+		rateLimitManager: rateLimitManager,
+		configPath:       configPath,
+		pid:              uint64(os.Getpid()),
+		hostClients:      make(map[string]*fasthttp.HostClient),
 	}
 
 	engine.compileRoutes()
