@@ -27,15 +27,15 @@ cache:
       - key: "Accept"
 
 # Global rate limiting configuration
-rateLimit:
+globalRateLimit:
   enabled: true
-  requests: 10             # 10 requests per window (global default)
+  requests: 50             # 50 requests per window (increased for testing)
   window: 1m               # 1 minute window
   storage: "memory"        # Use memory storage
   keyBy: ["ip"]            # Rate limit by IP
   blockDuration: 5m        # Block for 5 minutes after limit
   statusCode: 429          # HTTP 429 Too Many Requests
-  message: "Global rate limit exceeded. Only 10 requests per minute allowed."
+  message: "Global rate limit exceeded. Only 50 requests per minute allowed."
   headers:
     includeRemaining: true
     includeReset: true

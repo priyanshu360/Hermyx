@@ -33,15 +33,15 @@ cache:
       - key: "Accept-Encoding"
 
 # Global rate limiting configuration
-rateLimit:
+globalRateLimit:
   enabled: true
-  requests: 10             # 10 requests per window (global default)
-  window: 1m               # 1 minute window
+  requests: 50             # 50 requests per window (increased for testing)
+  window: 20s              # 20 second window (for faster testing)
   storage: "redis"         # Use Redis storage
   keyBy: ["ip"]            # Rate limit by IP
-  blockDuration: 5m        # Block for 5 minutes after limit
+  blockDuration: 2m        # Block for 2 minutes after limit
   statusCode: 429          # HTTP 429 Too Many Requests
-  message: "Global rate limit exceeded. Only 10 requests per minute allowed."
+  message: "Global rate limit exceeded. Only 50 requests per 20 seconds allowed."
   headers:
     includeRemaining: true
     includeReset: true
@@ -70,11 +70,11 @@ routes:
           - key: "Accept"
     rateLimit:
       enabled: true
-      requests: 2           # Override: Only 2 requests per minute
-      window: 1m
+      requests: 2           # Override: Only 2 requests per 20 seconds
+      window: 20s
       keyBy: ["ip"]
-      blockDuration: 10m
-      message: "Strict API rate limit exceeded. Only 2 requests per minute allowed."
+      blockDuration: 2m
+      message: "Strict API rate limit exceeded. Only 2 requests per 20 seconds allowed."
 
   # Route 2: Moderate API - 5 requests per 30 seconds
   - name: "moderate-api"
@@ -116,11 +116,11 @@ routes:
           - key: "Accept"
     rateLimit:
       enabled: true
-      requests: 3           # Override: 3 requests per minute
-      window: 1m
+      requests: 3           # Override: 3 requests per 20 seconds
+      window: 20s
       keyBy: ["header:User-Agent"]  # Rate limit by User-Agent header
-      blockDuration: 3m
-      message: "Header API rate limit exceeded. Only 3 requests per minute per User-Agent allowed."
+      blockDuration: 2m
+      message: "Header API rate limit exceeded. Only 3 requests per 20 seconds per User-Agent allowed."
 
   # Route 4: Combined Keys API - 2 requests per minute by IP + User-Agent
   - name: "combined-api"
@@ -139,11 +139,11 @@ routes:
           - key: "Accept"
     rateLimit:
       enabled: true
-      requests: 2           # Override: 2 requests per minute
-      window: 1m
+      requests: 2           # Override: 2 requests per 20 seconds
+      window: 20s
       keyBy: ["ip", "header:User-Agent"]  # Rate limit by IP + User-Agent
       blockDuration: 2m
-      message: "Combined API rate limit exceeded. Only 2 requests per minute per IP+User-Agent allowed."
+      message: "Combined API rate limit exceeded. Only 2 requests per 20 seconds per IP+User-Agent allowed."
 
   # Route 5: Burst Protection API - 8 requests per 10 seconds
   - name: "burst-api"
@@ -185,13 +185,13 @@ routes:
           - key: "Accept"
     rateLimit:
       enabled: true
-      # Inherits global config (10 requests per minute)
+      # Inherits global config (10 requests per 20 seconds)
       requests: 10
-      window: 1m
+      window: 20s
       keyBy: ["ip"]
-      blockDuration: 5m
+      blockDuration: 2m
       statusCode: 429
-      message: "Global API rate limit exceeded. Only 10 requests per minute allowed."
+      message: "Global API rate limit exceeded. Only 10 requests per 20 seconds allowed."
 
   # Route 7: Disabled Rate Limit API
   - name: "no-limit-api"
