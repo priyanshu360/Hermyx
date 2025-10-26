@@ -81,7 +81,6 @@ make_request() {
     local url=$1
     local method=${2:-GET}
     local headers=${3:-""}
-    local expected_status=${4:-200}
     
     local response
     local status_code
@@ -93,7 +92,6 @@ make_request() {
     fi
     
     status_code=$(echo "$response" | tail -n1)
-    body=$(echo "$response" | head -n -1)
     
     echo "$status_code"
 }
